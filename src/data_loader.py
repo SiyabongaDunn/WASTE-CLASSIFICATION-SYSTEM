@@ -1,3 +1,5 @@
+#This file is responsible for loading the dataset and returning the training and validation datasets that can be used by train.py and evaluate.py
+
 import tensorflow as tf
 
 DATASET_PATH = "Dataset/Garbage classification/Garbage classification"
@@ -32,4 +34,7 @@ def get_datasets():
     val_ds   = val_ds.map(lambda x, y: (normalise(x), y))
     train_ds = train_ds.cache().shuffle(1000).prefetch(tf.data.AUTOTUNE)
     val_ds   = val_ds.cache().prefetch(tf.data.AUTOTUNE)
+    
+    
+    
     return train_ds, val_ds
