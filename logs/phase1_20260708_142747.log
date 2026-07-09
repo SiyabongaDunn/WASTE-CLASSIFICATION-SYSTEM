@@ -1,0 +1,28 @@
+2026-07-08 14:27:47,601 - INFO - ============================================================
+2026-07-08 14:27:47,601 - INFO - PHASE 1: 5-Fold Cross-Validation - ViT
+2026-07-08 14:27:47,601 - INFO - ============================================================
+2026-07-08 14:27:47,601 - INFO - Config: config.yaml
+2026-07-08 14:27:47,602 - INFO - Image size: 224
+2026-07-08 14:27:47,602 - INFO - Batch size: 16
+2026-07-08 14:27:47,602 - INFO - Epochs: 20
+2026-07-08 14:27:47,602 - INFO - Folds: 5
+2026-07-08 14:27:47,602 - INFO - 
+----------------------------------------
+2026-07-08 14:27:47,604 - INFO - Loading dataset...
+2026-07-08 14:27:47,604 - INFO - ----------------------------------------
+2026-07-08 14:27:47,618 - INFO - 
+----------------------------------------
+2026-07-08 14:27:47,618 - INFO - Running 5-Fold Cross-Validation...
+2026-07-08 14:27:47,619 - INFO - ----------------------------------------
+2026-07-08 14:27:47,804 - WARNING - From C:\Users\MTC-ADM\Documents\Computer Science\COMP700\Project\WASTE-CLASSIFICATION-SYSTEM\.venv\lib\site-packages\keras\src\backend.py:1398: The name tf.executing_eagerly_outside_functions is deprecated. Please use tf.compat.v1.executing_eagerly_outside_functions instead.
+
+2026-07-08 14:27:50,909 - INFO - HTTP Request: GET https://huggingface.co/api/agent-harnesses "HTTP/1.1 200 OK"
+2026-07-08 14:27:51,455 - INFO - HTTP Request: HEAD https://huggingface.co/google/vit-base-patch16-224/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-08 14:27:51,770 - INFO - HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/google/vit-base-patch16-224/3f49326eb077187dfe1c2a2bb15fbd74e6ab91e3/config.json "HTTP/1.1 200 OK"
+2026-07-08 14:27:52,094 - INFO - HTTP Request: GET https://huggingface.co/api/resolve-cache/models/google/vit-base-patch16-224/3f49326eb077187dfe1c2a2bb15fbd74e6ab91e3/config.json "HTTP/1.1 200 OK"
+2026-07-08 14:27:52,757 - INFO - HTTP Request: HEAD https://huggingface.co/google/vit-base-patch16-224/resolve/main/model.safetensors "HTTP/1.1 302 Found"
+2026-07-08 14:27:52,759 - WARNING - Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+2026-07-08 14:31:22,481 - WARNING - From C:\Users\MTC-ADM\Documents\Computer Science\COMP700\Project\WASTE-CLASSIFICATION-SYSTEM\.venv\lib\site-packages\keras\src\utils\tf_utils.py:492: The name tf.ragged.RaggedTensorValue is deprecated. Please use tf.compat.v1.ragged.RaggedTensorValue instead.
+
+2026-07-08 14:31:23,507 - WARNING - From C:\Users\MTC-ADM\Documents\Computer Science\COMP700\Project\WASTE-CLASSIFICATION-SYSTEM\.venv\lib\site-packages\keras\src\engine\base_layer_utils.py:384: The name tf.executing_eagerly_outside_functions is deprecated. Please use tf.compat.v1.executing_eagerly_outside_functions instead.
+
