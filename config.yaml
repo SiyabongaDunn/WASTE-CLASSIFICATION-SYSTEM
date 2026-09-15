@@ -1,0 +1,48 @@
+# Waste Classification Phase 1 Configuration
+
+dataset:
+  data_dir: "data/raw/garbage-classification"
+  image_size: 224
+  num_classes: 6
+  test_size: 0.2
+  random_seed: 42
+  class_names:
+    - cardboard
+    - glass
+    - metal
+    - paper
+    - plastic
+    - trash
+
+model:
+  name: "vit-base-patch16-224"
+  patch_size: 16
+  embed_dim: 768
+  num_heads: 12
+  mlp_dim: 3072
+  num_layers: 12
+  learning_rate: 0.00002  # 2e-5
+  weight_decay: 0.01
+
+training:
+  batch_size: 16
+  epochs: 20
+  num_folds: 5
+  early_stopping_patience: 5
+  reduce_lr_patience: 3
+  reduce_lr_factor: 0.5
+
+evaluation:
+  metrics:
+    - macro_f1
+    - accuracy
+    - precision
+    - recall
+    - latency_ms
+
+paths:
+  data_dir: "data/raw"
+  splits_dir: "data/splits"
+  splits_file: "data/splits/test_set.pkl" 
+  results_dir: "results"
+  logs_dir: "logs"
