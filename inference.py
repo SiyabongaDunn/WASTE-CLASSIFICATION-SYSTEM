@@ -67,7 +67,6 @@ class WasteClassifier:
         print("=" * 50)
 
     def predict(self, image, model_name='vit', show_xai=True):
-        """Run prediction on an image."""
         processed_image = preprocess_image(image)
 
         model = self.models.get(model_name)
@@ -80,11 +79,6 @@ class WasteClassifier:
 
         logits = model.predict(processed_image, verbose=0)[0]
 
-        # head_out has no activation -- these are raw logits, not probabilities.
-        # Softmax them before treating any value as a "confidence". This does
-        # NOT change which class wins (argmax is monotonic under softmax), but
-        # it fixes every displayed confidence/percentage number, which were
-        # previously raw unbounded logits.
         shifted = logits - np.max(logits)
         exp = np.exp(shifted)
         predictions = exp / exp.sum()
@@ -111,36 +105,51 @@ class WasteClassifier:
 
         return result
 
-    def get_vit_attention(self, model, image):
-        """Extract ViT attention map."""
-        block_layers = [l for l in model.layers if l.name.startswith("block_")]
-        if block_layers:
-            target_layer = block_layers[-1]
-        else:
-            return None
+    def _get_attn_extractor(self, model):
+        """Build (once) a model that outputs all 12 attention maps plus the logits."""
+        extractor = getattr(self, "_attn_extractor", None)
+        if extractor is None:
+            attn_tensors = [l.output for l in model.layers
+                            if l.name.endswith("_attn_scores")]      # 12 layers, in block order
+            extractor = tf.keras.Model(model.input, attn_tensors + [model.output])
+            self._attn_extractor = extractor
+        return extractor
 
+    def get_vit_attention(self, model, image, method="chefer"):
         try:
-            with tf.GradientTape() as tape:
-                grad_model = tf.keras.Model(
-                    inputs=model.input,
-                    outputs=[model.get_layer(target_layer.name).output, model.output]
-                )
-                conv_outputs, predictions = grad_model(image)
-                class_idx = np.argmax(predictions[0])
-                loss = predictions[0][class_idx]
+            extractor = self._get_attn_extractor(model)
+            image = tf.convert_to_tensor(image, dtype=tf.float32)
 
-            grads = tape.gradient(loss, conv_outputs)
-            pooled_grads = tf.reduce_mean(grads, axis=(0, 1))
-            conv_outputs = conv_outputs[0]
-            heatmap = tf.reduce_mean(tf.multiply(pooled_grads, conv_outputs), axis=-1)
-            heatmap = tf.maximum(heatmap, 0) / (tf.reduce_max(heatmap) + 1e-8)
-            heatmap = heatmap.numpy()
-            heatmap = cv2.resize(heatmap, (224, 224))
-            return heatmap
+            with tf.GradientTape() as tape:
+                outputs = extractor(image, training=False)
+                attns, logits = outputs[:-1], outputs[-1]          # 12 x (1, H, N, N), (1, C)
+                class_idx = tf.argmax(logits[0])
+                score = logits[0][class_idx]
+
+            N = attns[0].shape[-1]                                 # 197
+            R = tf.eye(N)
+
+            if method == "rollout":
+                for a in attns:
+                    a = tf.reduce_mean(a[0], axis=0)               # average heads -> (N, N)
+                    a = 0.5 * a + 0.5 * tf.eye(N)                  # add residual connection
+                    a = a / tf.reduce_sum(a, axis=-1, keepdims=True)
+                    R = tf.matmul(a, R)
+            else:
+                grads = tape.gradient(score, attns)                # d(logit)/d(attention), per layer
+                for a, g in zip(attns, grads):
+                    cam = tf.reduce_mean(tf.nn.relu(a[0] * g[0]), axis=0)   # (N, N)
+                    R = R + tf.matmul(cam, R)
+
+            cls_to_patches = R[0, 1:].numpy()                      # CLS row, drop CLS column -> (196,)
+            g = int(np.sqrt(cls_to_patches.shape[0]))              # 14
+            heatmap = cls_to_patches.reshape(g, g)
+
+            heatmap = cv2.resize(heatmap, (224, 224), interpolation=cv2.INTER_CUBIC)
+            heatmap = np.maximum(heatmap, 0)
+            heatmap = (heatmap - heatmap.min()) / (heatmap.max() - heatmap.min() + 1e-8)
+            return heatmap.astype(np.float32)
+
         except Exception as e:
             print(f"Attention extraction failed: {e}")
             return None
-
-    def get_grad_cam(self, model, image, class_idx):
-        """Generate Grad-CAM heatmap."""
-        return None

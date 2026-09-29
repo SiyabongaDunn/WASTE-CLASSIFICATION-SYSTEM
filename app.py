@@ -1,123 +1,101 @@
-# app.py
-import streamlit as st
-import numpy as np
-import matplotlib.pyplot as plt
-from PIL import Image
+import base64
+import io
 import time
+
+import numpy as np
+import streamlit as st
+from PIL import Image
+from matplotlib import cm
+
 from inference import WasteClassifier
 from utils import get_top_classes, class_names
+from sortlight_component import sortlight_ui
 
-# Page configuration
 st.set_page_config(
     page_title="Waste Classification System",
     page_icon="",
     layout="wide"
 )
 
-st.title("Waste Classification System")
-st.markdown("Upload an image to classify waste materials using Vision Transformer.")
-
-# Initialize classifier
 @st.cache_resource
 def load_classifier():
     return WasteClassifier()
 
 classifier = load_classifier()
 
-# Sidebar
-with st.sidebar:
-    st.header("Settings")
-    
-    # Model selection (ViT only)
-    selected_model = "vit"
-    st.info("Model: ViT (50% Unfreeze)")
-    
-    # XAI toggle
-    show_xai = st.checkbox("Show XAI Visualization", value=True)
-    
-    st.divider()
-    st.caption("Model Information")
-    st.caption("Vision Transformer with two-stage fine-tuning (50% unfreeze)")
-
-# Main area
-col1, col2 = st.columns([1, 1])
-
-with col1:
-    st.subheader("Upload Image")
-    uploaded_file = st.file_uploader(
-        "Choose an image...",
-        type=["jpg", "jpeg", "png"],
-        accept_multiple_files=False
-    )
-    
-    if uploaded_file is not None:
-        image = Image.open(uploaded_file)
-        st.image(image, caption="Uploaded Image", use_container_width=True)
-        
-        if st.button("Classify", type="primary", use_container_width=True):
-            with st.spinner("Classifying..."):
-                start_time = time.time()
-                result = classifier.predict(image, selected_model, show_xai)
-                elapsed_time = (time.time() - start_time) * 1000
-                result['latency_ms'] = elapsed_time
-                st.session_state['result'] = result
-
-with col2:
-    st.subheader("Prediction Results")
-    
-    # In app.py, find this section:
-    if 'result' in st.session_state:
-        result = st.session_state['result']
-        
-        pred_class = result['class']
-        confidence = result['confidence']
-        
-        # FIX: Clamp confidence for progress bar
-        confidence_clamped = max(0.0, min(1.0, confidence))
-        
-        if pred_class == 'trash':
-            st.error(f"**{pred_class.upper()}**")
-        else:
-            st.success(f"**{pred_class.upper()}**")
-        
-        # Use clamped confidence for progress bar
-        st.progress(confidence_clamped)
-        st.caption(f"Confidence: {confidence_clamped:.2%}")
-        st.caption(f"Latency: {result['latency_ms']:.1f} ms")
-        
-        st.divider()
-        st.caption("Top Predictions")
-        top_classes = get_top_classes(np.array([result['predictions']]))
-        for item in top_classes:
-            st.caption(f"  {item['class']}: {item['confidence']:.2%}")
-        
-        if show_xai and 'xai_image' in result and result['xai_image'] is not None:
-            st.divider()
-            st.subheader("XAI Visualization")
-            st.caption("Type: ViT Attention Map")
-            
-            heatmap = result['xai_image']
-            
-            fig, axes = plt.subplots(1, 2, figsize=(10, 4))
-            img_array = np.array(image.resize((224, 224)))
-            axes[0].imshow(img_array)
-            axes[0].set_title("Original")
-            axes[0].axis('off')
-            
-            from matplotlib import cm
-            heatmap_norm = (heatmap - np.min(heatmap)) / (np.max(heatmap) - np.min(heatmap) + 1e-8)
-            heatmap_colored = cm.jet(heatmap_norm)[:, :, :3]
-            overlay = 0.6 * img_array / 255.0 + 0.4 * heatmap_colored
-            overlay = np.clip(overlay, 0, 1)
-            
-            axes[1].imshow(overlay)
-            axes[1].set_title("ViT Attention Map")
-            axes[1].axis('off')
-            
-            st.pyplot(fig)
-            plt.close()
+_DEFAULT_PALETTE = ["#c99b6a", "#5eead4", "#a9b4c6", "#e9e4d8", "#60a5fa", "#fb7185"]
+CLASS_COLORS = {}
+for i, name in enumerate(class_names):
+    if name.lower() == "trash":
+        CLASS_COLORS[name] = "#fb7185"
     else:
-        st.info("Upload an image and click 'Classify' to see results here.")
+        CLASS_COLORS[name] = _DEFAULT_PALETTE[i % len(_DEFAULT_PALETTE)]
 
-st.divider()
-st.caption("Waste Classification System | Powered by TensorFlow + Streamlit")
+
+def heatmap_to_png_b64(heatmap: np.ndarray) -> str:
+    heatmap_colored = cm.jet(heatmap)[:, :, :3]  # heatmap is already normalized 0-1
+    heatmap_uint8 = (heatmap_colored * 255).astype(np.uint8)
+    img = Image.fromarray(heatmap_uint8)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return base64.b64encode(buf.getvalue()).decode("ascii")
+
+
+def build_result_for_component(result: dict) -> dict:
+    predictions = np.array([result["predictions"]])
+    top_classes = get_top_classes(predictions)  # [{'class': ..., 'confidence': 0-1}, ...]
+
+    top3 = [
+        {"key": item["class"], "conf": item["confidence"] * 100}
+        for item in top_classes
+    ]
+
+    payload = {
+        "primary": result["class"],
+        "confidence": result["confidence"] * 100,
+        "top3": top3,
+        "interpretation": (
+            f"Predicted {result['class']} with "
+            f"{result['confidence'] * 100:.1f}% confidence."
+        ),
+        "latency_ms": result.get("latency_ms"),
+    }
+
+    xai_image = result.get("xai_image")
+    if xai_image is not None:
+        payload["attention_image_b64"] = heatmap_to_png_b64(xai_image)
+
+    return payload
+
+if "sortlight_result" not in st.session_state:
+    st.session_state.sortlight_result = None
+if "sortlight_last_action_id" not in st.session_state:
+    st.session_state.sortlight_last_action_id = None
+
+value = sortlight_ui(
+    class_names=class_names,
+    class_colors=CLASS_COLORS,
+    model_version="ViT (50% unfreeze)",
+    result=st.session_state.sortlight_result,
+    key="sortlight",
+)
+
+if value and value.get("action") == "classify":
+    action_id = value.get("action_id")
+
+    if action_id != st.session_state.sortlight_last_action_id:
+        st.session_state.sortlight_last_action_id = action_id
+
+        image_bytes = base64.b64decode(value["image_b64"])
+        image = Image.open(io.BytesIO(image_bytes))
+        show_xai = value.get("show_xai", True)
+
+        with st.spinner("Classifying..."):
+            start_time = time.time()
+            result = classifier.predict(image, "vit", show_xai)
+            result["latency_ms"] = (time.time() - start_time) * 1000
+
+        component_result = build_result_for_component(result)
+        component_result["action_id"] = action_id
+        st.session_state.sortlight_result = component_result
+        st.rerun()

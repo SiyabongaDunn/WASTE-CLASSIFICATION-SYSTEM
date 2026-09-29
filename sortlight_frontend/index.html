@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ViT Waste Classification</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-0:#0b0f0d;
+    --accent:#22c55e;
+    --accent-2:#16a34a;
+    --glass:#131816;
+    --glass-strong:#1a201d;
+    --glass-strong-2:#232a26;
+    --glass-border:#2a322d;
+    --text-hi:#ffffff;
+    --text-lo:rgba(255,255,255,0.70);
+    --text-faint:rgba(255,255,255,0.45);
+    --success:#22c55e;
+    --warning:#f59e0b;
+    --error:#ef4444;
+    --radius-lg:12px;
+    --radius-md:10px;
+    --radius-sm:8px;
+    --ease:cubic-bezier(.22,.9,.32,1);
+  }
+  :root[data-theme="light"]{
+    --bg-0:#ffffff;
+    --accent:#16a34a;
+    --accent-2:#15803d;
+    --glass:#f8fafc;
+    --glass-strong:#f1f5f9;
+    --glass-strong-2:#e2e8f0;
+    --glass-border:#e2e8f0;
+    --text-hi:#0b0f0d;
+    --text-lo:rgba(11,15,13,0.70);
+    --text-faint:rgba(11,15,13,0.45);
+  }
+
+  *{box-sizing:border-box;}
+  html,body{height:100%;margin:0;}
+  body{
+    background:var(--bg-0);
+    color:var(--text-hi);
+    font-family:'Inter',system-ui,-apple-system,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    transition:background .2s var(--ease), color .2s var(--ease);
+  }
+  h1,h2,h3{font-family:'Space Grotesk',sans-serif;margin:0;font-weight:600;}
+  p{margin:0;}
+  button{font-family:inherit;}
+  ol,ul{margin:0;padding:0;list-style:none;}
+  img{max-width:100%;display:block;}
+
+  .bg-orbs{display:none;}
+
+  .glass{
+    background:var(--glass);
+    border:1px solid var(--glass-border);
+    border-radius:var(--radius-lg);
+    position:relative;
+    isolation:isolate;
+  }
+
+  .app{position:relative;z-index:1;height:100vh;display:flex;flex-direction:column;padding:16px;gap:14px;overflow:hidden;}
+
+  .topbar{
+    flex:none;padding:13px 20px;
+    display:flex;align-items:center;justify-content:space-between;gap:16px;
+  }
+  .brand{display:flex;align-items:center;gap:12px;min-width:0;}
+  .brand-mark{width:34px;height:34px;border-radius:10px;flex:none;
+    background:var(--accent);
+    display:flex;align-items:center;justify-content:center;color:#ffffff;}
+  .brand-title{
+    font-family:'Space Grotesk',sans-serif;font-weight:700;
+    font-size:clamp(1.1rem, 2.6vw, 2.1rem);
+    letter-spacing:.4px;text-transform:uppercase;line-height:1.1;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .topbar-actions{display:flex;align-items:center;gap:10px;flex:none;}
+  .theme-toggle{display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:999px;background:var(--glass-strong);border:1px solid var(--glass-border);color:var(--text-hi);cursor:pointer;flex:none;}
+  .theme-toggle svg{width:18px;height:18px;}
+  .theme-toggle .icon-moon{display:none;}
+  [data-theme="light"] .theme-toggle .icon-sun{display:none;}
+  [data-theme="light"] .theme-toggle .icon-moon{display:block;}
+  .sidebar-toggle{display:none;align-items:center;gap:8px;padding:8px 13px;border-radius:999px;background:var(--glass-strong);border:1px solid var(--glass-border);color:var(--text-hi);cursor:pointer;font-size:.83rem;}
+  .sidebar-toggle svg{width:16px;height:16px;}
+
+  .layout{
+    flex:1;min-height:0;
+    display:grid;grid-template-columns:270px minmax(0,1fr) minmax(0,1fr);
+    grid-template-rows:minmax(0,1fr);
+    gap:14px;
+  }
+  .sidebar{grid-column:1;padding:18px;display:flex;flex-direction:column;gap:14px;min-height:0;overflow-y:auto;}
+  .col{padding:20px;display:flex;flex-direction:column;gap:14px;min-width:0;min-height:0;overflow-y:auto;}
+  .col-input{grid-column:2;}
+  .col-results{grid-column:3;}
+
+  .sidebar-head{display:none;align-items:center;justify-content:space-between;}
+  .sidebar-content{display:flex;flex-direction:column;gap:14px;min-height:0;}
+
+  .col-header{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;flex:none;}
+  .col-header h2{font-size:1rem;}
+  .col-hint{font-size:.76rem;color:var(--text-faint);}
+  .latency-chip{font-size:.74rem;padding:5px 11px;border-radius:999px;background:var(--glass-strong);border:1px solid var(--glass-border);color:var(--text-hi);white-space:nowrap;}
+
+  .side-section{display:flex;flex-direction:column;gap:8px;flex:none;}
+  .side-row{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+  .side-section h2{font-size:.88rem;}
+  .side-desc{font-size:.75rem;color:var(--text-lo);line-height:1.4;}
+  .side-value{font-size:.78rem;color:var(--accent);font-weight:600;}
+  .side-divider{height:1px;background:var(--glass-border);border:none;margin:0;flex:none;}
+
+  .switch{width:42px;height:24px;border-radius:999px;background:var(--glass-strong);border:1px solid var(--glass-border);position:relative;cursor:pointer;flex:none;transition:background .25s var(--ease);padding:0;}
+  .switch-knob{position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#ffffff;transition:transform .25s var(--ease);}
+  .switch.on{background:var(--accent);}
+  .switch.on .switch-knob{transform:translateX(18px);}
+
+  .segmented{display:flex;gap:4px;padding:4px;border-radius:999px;background:var(--glass-strong);border:1px solid var(--glass-border);}
+  .seg-btn{flex:1;padding:7px 10px;border:none;background:transparent;color:var(--text-lo);border-radius:999px;font-size:.76rem;font-weight:600;cursor:pointer;transition:background .2s var(--ease),color .2s var(--ease);}
+  .seg-btn.active{background:var(--accent);color:#ffffff;}
+
+  input[type="range"]{-webkit-appearance:none;width:100%;height:6px;border-radius:999px;background:var(--glass-strong-2);outline:none;}
+  input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:17px;height:17px;border-radius:50%;background:var(--accent);cursor:pointer;}
+  input[type="range"]::-moz-range-thumb{width:17px;height:17px;border:none;border-radius:50%;background:var(--accent);cursor:pointer;}
+
+  .about-panel{border-top:1px solid var(--glass-border);padding-top:12px;display:flex;flex-direction:column;gap:10px;flex:none;}
+  .stat-row{display:flex;gap:8px;}
+  .stat{flex:1;padding:9px;border-radius:var(--radius-sm);background:var(--glass-strong);border:1px solid var(--glass-border);text-align:center;}
+  .stat-value{display:block;font-family:'Space Grotesk',sans-serif;font-size:1.05rem;font-weight:700;color:var(--accent);}
+  .stat-label{display:block;font-size:.68rem;color:var(--text-lo);margin-top:1px;}
+  .side-footer{font-size:.7rem;color:var(--text-faint);margin-top:auto;padding-top:4px;flex:none;}
+
+  /* Class list in sidebar */
+  .class-list{display:flex;flex-direction:column;gap:5px;margin-top:2px;}
+  .class-list li{display:flex;align-items:center;gap:8px;font-size:.76rem;color:var(--text-lo);}
+  .class-dot{width:8px;height:8px;border-radius:50%;flex:none;}
+
+  /* Collapsible RAI disclosure */
+  .rai-details{border-top:1px solid var(--glass-border);padding-top:10px;margin-top:2px;}
+  .rai-details summary{
+    cursor:pointer;font-size:.76rem;font-weight:600;color:var(--text-hi);
+    list-style:none;display:flex;align-items:center;justify-content:space-between;
+  }
+  .rai-details summary::after{
+    content:'+';font-size:.9rem;color:var(--text-lo);transition:transform .2s var(--ease);
+  }
+  .rai-details[open] summary::after{content:'−';}
+  .rai-details summary::-webkit-details-marker{display:none;}
+  .rai-details p{margin-top:8px;font-size:.73rem;line-height:1.45;}
+
+  .btn{padding:11px 18px;border-radius:999px;border:none;font-weight:600;font-size:.85rem;cursor:pointer;transition:transform .18s var(--ease),opacity .18s var(--ease);}
+  .btn:active{transform:scale(.97);}
+  .btn-primary{background:var(--accent);color:#ffffff;}
+  .btn-primary:hover:not(:disabled){background:var(--accent-2);}
+  .btn-ghost{background:var(--glass-strong);color:var(--text-hi);border:1px solid var(--glass-border);}
+  .btn-ghost:hover:not(:disabled){background:var(--glass-strong-2);}
+  .btn:disabled{opacity:.4;cursor:not-allowed;}
+  .action-row{display:flex;gap:10px;flex:none;}
+  .text-link{background:none;border:none;color:var(--accent);font-size:.78rem;cursor:pointer;padding:0;text-align:left;font-weight:500;flex:none;text-decoration:underline;}
+  .text-link:hover{opacity:.75;}
+  .text-link:disabled{opacity:.4;cursor:not-allowed;text-decoration:none;}
+
+  .dropzone{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;flex:1 1 auto;min-height:0;border:1.5px dashed var(--glass-border);border-radius:var(--radius-md);cursor:pointer;padding:14px;text-align:center;transition:border-color .2s var(--ease),background .2s var(--ease);}
+  .dropzone:hover,.dropzone.dragover{border-color:var(--accent);background:var(--glass-strong);}
+  .dropzone svg{width:30px;height:30px;color:var(--text-lo);flex:none;}
+  .dz-title{font-size:.9rem;font-weight:600;}
+  .dz-sub{font-size:.76rem;color:var(--text-faint);margin-top:2px;}
+  .dropzone-empty{display:flex;flex-direction:column;align-items:center;gap:8px;}
+  .dropzone-preview{width:100%;height:100%;display:flex;min-height:0;}
+  .dropzone-preview img{width:100%;height:100%;object-fit:contain;border-radius:var(--radius-sm);margin:auto;}
+
+  .meta-row{display:flex;flex-wrap:wrap;gap:8px;flex:none;}
+  .meta-chip{display:flex;flex-direction:column;gap:2px;padding:7px 11px;border-radius:var(--radius-sm);background:var(--glass-strong);border:1px solid var(--glass-border);font-size:.7rem;}
+  .meta-chip span{color:var(--text-faint);}
+  .meta-chip strong{font-weight:600;font-size:.78rem;}
+
+  .results-empty{flex:1;display:flex;align-items:center;justify-content:center;text-align:center;color:var(--text-faint);font-size:.86rem;padding:20px 10px;}
+  .results-body{display:flex;flex-direction:column;gap:14px;opacity:0;transform:translateY(8px);transition:opacity .4s var(--ease),transform .4s var(--ease);min-height:0;}
+  .results-body.show{opacity:1;transform:translateY(0);}
+
+  .prediction-card{display:flex;flex-direction:column;gap:10px;flex:none;}
+  .prediction-chip{display:inline-flex;align-items:center;gap:8px;align-self:flex-start;padding:6px 13px 6px 9px;border-radius:999px;background:var(--glass-strong);border:1px solid var(--glass-border);}
+  .chip-dot{width:10px;height:10px;border-radius:50%;background:var(--accent-class,var(--accent));}
+  .prediction-chip span:last-child{font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:.9rem;}
+  .confidence-display{display:flex;flex-direction:column;gap:8px;}
+  .confidence-number{font-family:'Space Grotesk',sans-serif;font-size:2.35rem;font-weight:700;line-height:1;color:var(--text-hi);}
+  .confidence-track{width:100%;height:9px;border-radius:999px;background:var(--glass-strong);overflow:hidden;}
+  .confidence-fill{height:100%;width:0%;border-radius:999px;transition:width .8s var(--ease),background .3s var(--ease);}
+  .confidence-fill.ok{background:var(--accent);}
+
+  .top3{flex:none;}
+  .top3 h3{font-size:.82rem;color:var(--text-lo);font-weight:600;margin-bottom:8px;}
+  .top3-list{display:flex;flex-direction:column;gap:7px;}
+  .top3-list li{display:flex;align-items:center;gap:9px;}
+  .top3-rank{width:18px;height:18px;border-radius:50%;background:var(--glass-strong);display:flex;align-items:center;justify-content:center;font-size:.66rem;color:var(--text-lo);flex:none;}
+  .top3-dot{width:8px;height:8px;border-radius:50%;flex:none;}
+  .top3-label{width:72px;flex:none;font-size:.78rem;}
+  .top3-track{flex:1;height:6px;border-radius:999px;background:var(--glass-strong);overflow:hidden;}
+  .top3-fill{height:100%;border-radius:999px;background:var(--accent);transition:width .7s var(--ease);}
+  .top3-pct{width:36px;text-align:right;font-size:.74rem;color:var(--text-lo);font-variant-numeric:tabular-nums;}
+
+  .attention-section{flex:1;min-height:0;display:flex;flex-direction:column;}
+  .attention-section h3{font-size:.82rem;color:var(--text-lo);font-weight:600;margin-bottom:8px;flex:none;}
+  .attention-grid{display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:1fr;gap:10px;flex:1;min-height:160px;}
+  .attention-grid.overlay{grid-template-columns:1fr;}
+  .attention-grid.overlay .attention-tile:first-child{display:none;}
+  .attention-tile{border-radius:var(--radius-md);overflow:hidden;border:1px solid var(--glass-border);background:var(--glass-strong);display:flex;flex-direction:column;min-height:0;}
+  .attn-image-wrap{position:relative;flex:1;min-height:0;overflow:hidden;}
+  .attn-image-wrap img{width:100%;height:100%;object-fit:cover;}
+  .attn-heat{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;mix-blend-mode:screen;opacity:.85;transition:opacity .5s var(--ease);}
+  .attention-tile figcaption{padding:6px 10px;text-align:center;font-size:.7rem;color:var(--text-faint);flex:none;}
+
+  .interpretation{margin-top:10px;padding:9px 13px;border-left:3px solid var(--accent);background:var(--glass-strong);border-radius:0 var(--radius-sm) var(--radius-sm) 0;font-size:.79rem;color:var(--text-lo);line-height:1.5;flex:none;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+
+  @media (max-width:1100px){
+    .layout{grid-template-columns:1fr;grid-template-rows:none;}
+    .col-input,.col-results{grid-column:1;}
+    .sidebar,.col{overflow-y:visible;max-height:none;}
+    .sidebar-toggle{display:inline-flex;}
+    .sidebar-head{display:flex;}
+    .sidebar-content{overflow:hidden;max-height:2400px;opacity:1;transition:max-height .4s var(--ease),opacity .3s var(--ease);}
+    .sidebar:not(.open) .sidebar-content{max-height:0;opacity:0;}
+    .dropzone{min-height:180px;}
+    .attention-grid{min-height:220px;}
+  }
+  @media (max-width:640px){
+    .app{padding:12px;gap:10px;}
+    .topbar{padding:11px 15px;}
+    .brand p{display:none;}
+    .col,.sidebar{padding:16px;}
+    .attention-grid{grid-template-columns:1fr;}
+    .attention-grid .attention-tile:first-child{display:block;}
+    .confidence-number{font-size:2rem;}
+  }
+</style>
+</head>
+<body>
+
+<div class="bg-orbs" aria-hidden="true">
+  <div class="orb orb-a"></div>
+  <div class="orb orb-b"></div>
+  <div class="orb orb-c"></div>
+</div>
+
+<div class="app">
+
+  <header class="topbar glass">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M8 7V5a1 1 0 011-1h6a1 1 0 011 1v2m-9 0l1 12a2 2 0 002 2h4a2 2 0 002-2l1-12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <h1 class="brand-title">Waste Classification System</h1>
+    </div>
+    <div class="topbar-actions">
+      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle light and dark theme">
+        <svg class="icon-sun" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="4.2" stroke="currentColor" stroke-width="1.8"/><path d="M12 2.5v2.2M12 19.3v2.2M4.2 4.2l1.6 1.6M18.2 18.2l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.2 19.8l1.6-1.6M18.2 5.8l1.6-1.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <svg class="icon-moon" viewBox="0 0 24 24" fill="none"><path d="M20 14.5A8.5 8.5 0 019.5 4a8.5 8.5 0 1010.5 10.5z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+      </button>
+      <button class="sidebar-toggle" id="sidebarToggle" aria-expanded="false" aria-controls="sidebar">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        Settings
+      </button>
+    </div>
+  </header>
+
+  <main class="layout" id="layout">
+
+    <aside class="sidebar glass" id="sidebar">
+      <div class="sidebar-head">
+        <h2>Settings</h2>
+      </div>
+      <div class="sidebar-content">
+
+        <div class="side-section">
+          <div class="side-row">
+            <div>
+              <h2>Explainability</h2>
+              <p class="side-desc">Show the attention map alongside each prediction.</p>
+            </div>
+            <button class="switch on" id="xaiToggle" role="switch" aria-checked="true" aria-label="Toggle attention map"><span class="switch-knob"></span></button>
+          </div>
+        </div>
+
+        <hr class="side-divider">
+
+        <div class="side-section" id="viewModeSection">
+          <h2>Attention view</h2>
+          <div class="segmented" id="viewModeSeg">
+            <button class="seg-btn active" data-mode="side" type="button">Side by side</button>
+            <button class="seg-btn" data-mode="overlay" type="button">Overlay</button>
+          </div>
+        </div>
+
+        <hr class="side-divider">
+
+        <div class="about-panel">
+          <p class="side-desc" id="aboutText">
+            Powered by a Keras-trained Vision Transformer (ViT-B/16), fine-tuned with the top 50% of layers unfrozen. It achieves <strong>94.3% accuracy</strong> across six waste streams — outperforming ResNet50V2 and MobileNetV2 baselines.
+          </p>
+
+          <div class="stat-row">
+            <div class="stat">
+              <span class="stat-value" id="statAccuracy">94.3%</span>
+              <span class="stat-label">Accuracy</span>
+            </div>
+            <div class="stat">
+              <span class="stat-value" id="statF1">0.9145</span>
+              <span class="stat-label">Macro F1</span>
+            </div>
+          </div>
+
+          <div class="side-section">
+            <h2>Recognised waste streams</h2>
+            <ul class="class-list">
+              <li><span class="class-dot" style="background:#a16207"></span>Cardboard</li>
+              <li><span class="class-dot" style="background:#22c55e"></span>Glass</li>
+              <li><span class="class-dot" style="background:#64748b"></span>Metal</li>
+              <li><span class="class-dot" style="background:#eab308"></span>Paper</li>
+              <li><span class="class-dot" style="background:#3b82f6"></span>Plastic</li>
+              <li><span class="class-dot" style="background:#ef4444"></span>Trash</li>
+            </ul>
+          </div>
+
+          <details class="rai-details">
+            <summary>Responsible AI disclosure</summary>
+            <p class="side-desc">
+              This application is built to support human review, not replace it. Models can misclassify items due to edge cases, unusual geometry, or poor lighting. Always verify the output before physical disposal.
+            </p>
+          </details>
+        </div>
+
+        <p class="side-footer" id="sideFooter">ViT-B/16 · 50% unfrozen</p>
+      </div>
+    </aside>
+
+    <section class="col col-input glass" id="colInput">
+      <div class="col-header">
+        <h2>Input image</h2>
+        <span class="col-hint">JPG or PNG, up to 10MB</span>
+      </div>
+
+      <label class="dropzone" id="dropzone" for="fileInput">
+        <input type="file" id="fileInput" accept="image/*" hidden>
+        <div class="dropzone-empty" id="dropzoneEmpty">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M12 16V4m0 0L7 9m5-5l5 5M5 20h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <p class="dz-title">Drop an image here</p>
+          <p class="dz-sub">or click to browse</p>
+        </div>
+        <div class="dropzone-preview" id="dropzonePreview" hidden>
+          <img id="previewImg" alt="Uploaded waste item">
+        </div>
+      </label>
+
+      <button class="text-link" id="sampleLink" type="button" hidden>Try a sample image instead</button>
+
+      <div class="meta-row" id="metaRow" hidden>
+        <div class="meta-chip"><span>File</span><strong id="metaName">—</strong></div>
+        <div class="meta-chip"><span>Size</span><strong id="metaSize">—</strong></div>
+        <div class="meta-chip"><span>Resolution</span><strong id="metaRes">—</strong></div>
+      </div>
+
+      <div class="action-row">
+        <button class="btn btn-primary" id="classifyBtn" disabled>Classify image</button>
+        <button class="btn btn-ghost" id="resetBtn">Reset</button>
+      </div>
+    </section>
+
+    <section class="col col-results glass" id="colResults">
+      <div class="col-header">
+        <h2>Prediction</h2>
+        <span class="latency-chip" id="latencyChip" hidden>Inference time: 0ms</span>
+      </div>
+
+      <div class="results-empty" id="resultsEmpty">
+        <p>Your results will appear here once you classify an image.</p>
+      </div>
+
+      <div class="results-body" id="resultsBody" hidden>
+
+        <div class="prediction-card">
+          <div class="prediction-chip" id="predChip">
+            <span class="chip-dot" id="predDot"></span>
+            <span id="predLabel">—</span>
+          </div>
+          <div class="confidence-display">
+            <span class="confidence-number" id="confNumber">0%</span>
+            <div class="confidence-track"><div class="confidence-fill" id="confFill"></div></div>
+          </div>
+        </div>
+
+        <div class="top3">
+          <h3>Top 3 predictions</h3>
+          <ol class="top3-list" id="top3List"></ol>
+        </div>
+
+        <div class="attention-section" id="attentionSection">
+          <h3>Where the model looked</h3>
+          <div class="attention-grid" id="attentionGrid">
+            <figure class="attention-tile">
+              <div class="attn-image-wrap"><img id="attnOriginal" alt="Original uploaded image"></div>
+              <figcaption>Original</figcaption>
+            </figure>
+            <figure class="attention-tile">
+              <div class="attn-image-wrap">
+                <img id="attnMapBase" alt="Attention map">
+                <img id="attnHeat" class="attn-heat" alt="">
+              </div>
+              <figcaption id="attnCaption">Attention rollout</figcaption>
+            </figure>
+          </div>
+          <p class="interpretation" id="interpretationText">—</p>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  (function initTheme(){
+    var root = document.documentElement;
+    var btn = document.getElementById('themeToggle');
+    var saved = localStorage.getItem('sortlight-theme');
+    if (saved === 'light') root.setAttribute('data-theme', 'light');
+
+    btn.addEventListener('click', function(){
+      var isLight = root.getAttribute('data-theme') === 'light';
+      if (isLight){
+        root.removeAttribute('data-theme');
+        localStorage.setItem('sortlight-theme', 'dark');
+      } else {
+        root.setAttribute('data-theme', 'light');
+        localStorage.setItem('sortlight-theme', 'light');
+      }
+    });
+  })();
+
+  function sendToStreamlit(type, data){
+    var payload = Object.assign({ isStreamlitMessage: true, type: type }, data);
+    window.parent.postMessage(payload, "*");
+  }
+
+  function setComponentValue(value){
+    sendToStreamlit("streamlit:setComponentValue", { value: value });
+  }
+
+  function setFrameHeight(){
+    sendToStreamlit("streamlit:setFrameHeight", { height: 860 });
+  }
+
+  function notifyReady(){
+    sendToStreamlit("streamlit:componentReady", { apiVersion: 1 });
+  }
+
+  const $ = id => document.getElementById(id);
+
+  let CLASS_MAP = {};
+  let lastRenderedResultKey = null;
+
+  const state = {
+    imgDataUrl: null,
+    imgB64: null,
+    xaiOn: true,
+    viewMode: 'side',
+    lastResult: null
+  };
+
+  function formatBytes(bytes){
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB';
+    return (bytes/(1024*1024)).toFixed(1) + ' MB';
+  }
+
+  function setupSwitch(el, onChange){
+    el.addEventListener('click', () => {
+      const on = el.getAttribute('aria-checked') !== 'true';
+      el.setAttribute('aria-checked', String(on));
+      el.classList.toggle('on', on);
+      onChange(on);
+    });
+  }
+
+  setupSwitch($('xaiToggle'), on => {
+    state.xaiOn = on;
+    $('attentionSection').style.display = on ? '' : 'none';
+    $('viewModeSection').style.opacity = on ? '1' : '.4';
+    $('viewModeSection').style.pointerEvents = on ? 'auto' : 'none';
+  });
+
+  const seg = $('viewModeSeg');
+  seg.addEventListener('click', e => {
+    const btn = e.target.closest('.seg-btn');
+    if (!btn) return;
+    seg.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.viewMode = btn.dataset.mode;
+    applyViewMode();
+  });
+
+  function applyViewMode(){
+    const grid = $('attentionGrid');
+    const caption = $('attnCaption');
+    if (state.viewMode === 'overlay'){
+      grid.classList.add('overlay');
+      caption.textContent = 'Original with attention overlay';
+      $('attnHeat').style.opacity = .78;
+    } else {
+      grid.classList.remove('overlay');
+      caption.textContent = 'Attention map';
+      $('attnHeat').style.opacity = .85;
+    }
+  }
+
+  const sidebar = $('sidebar');
+  $('sidebarToggle').addEventListener('click', () => {
+    const open = !sidebar.classList.contains('open');
+    sidebar.classList.toggle('open', open);
+    $('sidebarToggle').setAttribute('aria-expanded', String(open));
+  });
+
+  const dropzone = $('dropzone');
+  const fileInput = $('fileInput');
+
+  function readFileAsDataUrl(file){
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function loadImageDims(dataUrl){
+    return new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => resolve({w:img.naturalWidth, h:img.naturalHeight});
+      img.src = dataUrl;
+    });
+  }
+
+  async function handleFile(file){
+    if (!file || !file.type.startsWith('image/')) return;
+    const dataUrl = await readFileAsDataUrl(file);
+    const dims = await loadImageDims(dataUrl);
+    state.imgDataUrl = dataUrl;
+    state.imgB64 = dataUrl.split(',')[1];
+    setPreview(dataUrl, {name:file.name, size:formatBytes(file.size), w:dims.w, h:dims.h});
+  }
+
+  function setPreview(dataUrl, meta){
+    $('previewImg').src = dataUrl;
+    $('dropzoneEmpty').hidden = true;
+    $('dropzonePreview').hidden = false;
+    $('metaRow').hidden = false;
+    $('metaName').textContent = meta.name;
+    $('metaSize').textContent = meta.size;
+    $('metaRes').textContent = meta.w + ' × ' + meta.h;
+    $('classifyBtn').disabled = false;
+  }
+
+  ['dragover','dragenter'].forEach(evt => dropzone.addEventListener(evt, e => {
+    e.preventDefault(); dropzone.classList.add('dragover');
+  }));
+  ['dragleave','drop'].forEach(evt => dropzone.addEventListener(evt, e => {
+    e.preventDefault(); dropzone.classList.remove('dragover');
+  }));
+  dropzone.addEventListener('drop', e => { if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
+  fileInput.addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+
+  let samples = [];
+  let sampleIndex = 0;
+  $('sampleLink').addEventListener('click', () => {
+    if (!samples.length) return;
+    const s = samples[sampleIndex % samples.length];
+    sampleIndex++;
+    const dataUrl = 'data:image/jpeg;base64,' + s.image_b64;
+    state.imgDataUrl = dataUrl;
+    state.imgB64 = s.image_b64;
+    setPreview(dataUrl, {name: s.name || 'sample.jpg', size: s.size_label || '—', w: s.width || '—', h: s.height || '—'});
+  });
+
+  function animateNumber(el, to, duration){
+    const start = performance.now();
+    function step(now){
+      const t = Math.min(1, (now-start)/duration);
+      const eased = 1 - Math.pow(1-t, 3);
+      el.textContent = Math.round(to*eased) + '%';
+      if (t < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
+  function renderResult(result){
+    state.lastResult = result;
+    $('resultsEmpty').hidden = true;
+    const body = $('resultsBody');
+    body.hidden = false;
+    requestAnimationFrame(() => body.classList.add('show'));
+
+    const primaryMeta = CLASS_MAP[result.primary] || {label: result.primary, color: '#22c55e'};
+
+    $('predLabel').textContent = primaryMeta.label;
+    $('predDot').style.setProperty('--accent-class', primaryMeta.color);
+    $('predChip').style.setProperty('--accent-class', primaryMeta.color);
+
+    animateNumber($('confNumber'), result.confidence, 700);
+    requestAnimationFrame(() => {
+      $('confFill').style.width = result.confidence + '%';
+      $('confFill').classList.add('ok');
+    });
+
+    const list = $('top3List');
+    list.innerHTML = '';
+    result.top3.forEach((item, i) => {
+      const meta = CLASS_MAP[item.key] || {label: item.label || item.key, color: '#16a34a'};
+      const li = document.createElement('li');
+      li.innerHTML = `
+        <span class="top3-rank">${i+1}</span>
+        <span class="top3-dot" style="background:${meta.color}"></span>
+        <span class="top3-label">${meta.label}</span>
+        <span class="top3-track"><span class="top3-fill" style="width:0%"></span></span>
+        <span class="top3-pct">${Math.round(item.conf)}%</span>`;
+      list.appendChild(li);
+      requestAnimationFrame(() => { li.querySelector('.top3-fill').style.width = item.conf + '%'; });
+    });
+
+    $('attnOriginal').src = state.imgDataUrl;
+    $('attnMapBase').src = state.imgDataUrl;
+    if (result.attention_image_b64){
+      $('attnHeat').src = 'data:image/png;base64,' + result.attention_image_b64;
+      $('attnHeat').style.display = '';
+    } else {
+      $('attnHeat').style.display = 'none';
+    }
+    applyViewMode();
+
+    $('interpretationText').textContent = result.interpretation || '—';
+
+    const chip = $('latencyChip');
+    if (typeof result.latency_ms === 'number'){
+      chip.hidden = false;
+      chip.textContent = `Inference time: ${Math.round(result.latency_ms)}ms`;
+    } else {
+      chip.hidden = true;
+    }
+  }
+
+  const classifyBtn = $('classifyBtn');
+  classifyBtn.addEventListener('click', () => {
+    if (!state.imgB64) return;
+    classifyBtn.disabled = true;
+    $('resetBtn').disabled = true;
+    classifyBtn.textContent = 'Classifying…';
+
+    setComponentValue({
+      action: 'classify',
+      action_id: Date.now() + '-' + Math.random().toString(36).slice(2),
+      image_b64: state.imgB64,
+      show_xai: state.xaiOn
+    });
+  });
+
+  $('resetBtn').addEventListener('click', () => {
+    state.imgDataUrl = null; state.imgB64 = null; state.lastResult = null;
+    fileInput.value = '';
+    $('dropzoneEmpty').hidden = false;
+    $('dropzonePreview').hidden = true;
+    $('metaRow').hidden = true;
+    classifyBtn.disabled = true;
+    classifyBtn.textContent = 'Classify image';
+    $('resetBtn').disabled = false;
+    $('resultsBody').hidden = true;
+    $('resultsBody').classList.remove('show');
+    $('resultsEmpty').hidden = false;
+    $('latencyChip').hidden = true;
+    lastRenderedResultKey = null;
+  });
+
+  function onStreamlitMessage(event){
+    if (!event.data || event.data.type !== "streamlit:render") return;
+    const args = event.data.args || {};
+
+    if (Array.isArray(args.classNames)){
+      CLASS_MAP = {};
+      args.classNames.forEach(name => {
+        const colors = args.classColors || {};
+        CLASS_MAP[name] = { label: name.charAt(0).toUpperCase() + name.slice(1), color: colors[name] || '#22c55e' };
+      });
+
+      // Populate the sidebar "Recognised waste streams" list from Python,
+      // so it can never drift from the model's actual label encoder.
+      const ul = document.querySelector('.class-list');
+      if (ul){
+        ul.innerHTML = '';
+        args.classNames.forEach(name => {
+          const meta = CLASS_MAP[name] || {label: name, color: '#22c55e'};
+          const li = document.createElement('li');
+          li.innerHTML = `<span class="class-dot" style="background:${meta.color}"></span>${meta.label}`;
+          ul.appendChild(li);
+        });
+      }
+    }
+
+    if (typeof args.accuracy === 'number') $('statAccuracy').textContent = (args.accuracy * 100).toFixed(1) + '%';
+    if (typeof args.macroF1 === 'number') $('statF1').textContent = args.macroF1.toFixed(4);
+    if (args.modelVersion) $('sideFooter').textContent = 'Model ' + args.modelVersion;
+    if (args.aboutText) $('aboutText').innerHTML = args.aboutText;
+
+    if (Array.isArray(args.samples) && args.samples.length){
+      samples = args.samples;
+      $('sampleLink').hidden = false;
+    } else {
+      $('sampleLink').hidden = true;
+    }
+
+    const resultKey = args.result ? JSON.stringify(args.result).length + ':' + (args.result.action_id || args.result.confidence) : null;
+    if (args.result && resultKey !== lastRenderedResultKey){
+      lastRenderedResultKey = resultKey;
+      renderResult(args.result);
+      classifyBtn.disabled = !state.imgB64;
+      classifyBtn.textContent = 'Classify image';
+      $('resetBtn').disabled = false;
+    }
+
+    setFrameHeight();
+  }
+
+  window.addEventListener("message", onStreamlitMessage);
+  applyViewMode();
+  notifyReady();
+  window.addEventListener('load', () => setTimeout(setFrameHeight, 0));
+})();
+</script>
+</body>
+</html>

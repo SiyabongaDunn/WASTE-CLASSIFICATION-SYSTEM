@@ -7,13 +7,6 @@ class_names = ['cardboard', 'glass', 'metal', 'paper', 'plastic', 'trash']
 
 
 def preprocess_image(image):
-    """Mirrors the training-time pipeline exactly:
-    decode -> tf.image.resize (bilinear) -> cast float32 -> /255.0.
-    Previously this used cv2.resize, whose bilinear kernel doesn't produce
-    byte-identical output to tf.image.resize -- using tf.image here removes
-    that mismatch. Also guards against RGBA/grayscale uploads, which would
-    otherwise break the model's fixed (224, 224, 3) input shape.
-    """
     if isinstance(image, Image.Image):
         image = np.array(image.convert("RGB"))
     else:
