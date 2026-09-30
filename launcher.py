@@ -5,6 +5,14 @@ import socket
 import threading
 import webview
 
+if getattr(sys, 'frozen', False) and sys.stdout is None:
+    log_path = os.path.join(os.path.expanduser("~"), "waste_classification_log.txt")
+    log_file = open(log_path, "w", buffering=1, encoding="utf-8")
+    sys.stdout = log_file
+    sys.stderr = log_file
+
+os.environ["STREAMLIT_GLOBAL_DEVELOPMENT_MODE"] = "false"
+
 
 def get_free_port():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -13,6 +21,7 @@ def get_free_port():
 
 
 def resource_path(relative_path):
+    """Resolves paths correctly whether running as script or frozen exe."""
     if hasattr(sys, '_MEIPASS'):
         return os.path.join(sys._MEIPASS, relative_path)
     return os.path.join(os.path.abspath("."), relative_path)
