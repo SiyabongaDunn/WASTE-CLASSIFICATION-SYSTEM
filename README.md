@@ -66,12 +66,14 @@ Three models are implemented, trained, and rigorously compared across three expe
 
 | Class | Images |
 |---|---|
-| Cardboard | 393 |
-| Glass | 491 |
-| Metal | 400 |
-| Paper | 584 |
-| Plastic | 472 |
-| Trash | 127 |
+| Cardboard | 403 |
+| Glass | 501 |
+| Metal | 410 |
+| Paper | 594 |
+| Plastic | 482 |
+| Trash | 137 |
+
+
 
 Source: https://www.kaggle.com/datasets/asdasdasasdas/garbage-classification
 
