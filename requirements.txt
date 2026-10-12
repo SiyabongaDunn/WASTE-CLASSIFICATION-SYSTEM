@@ -1,3 +1,4 @@
+gdown
 tensorflow==2.20.0
 keras==3.13.2
 streamlit>=1.35.0

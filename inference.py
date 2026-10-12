@@ -1,15 +1,28 @@
 import os
+try:
+    import gdown
+except ImportError:
+    gdown = None
+
 import tensorflow as tf
-from tensorflow import keras
 import numpy as np
-import matplotlib.pyplot as plt
 import cv2
 from utils import preprocess_image, class_names
 from vit_model import build_vit_model
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODELS_DIR = os.path.join(BASE_DIR, 'models')
+MODEL_PATH = os.path.join(MODELS_DIR, 'vit_weights.weights.h5')
+DRIVE_URL = "https://drive.google.com/uc?id=1G6fg3M7USlyPf8ACqxkcoRHv7g8r8Erl"
 
+# Auto-download for anyone cloning the repo - only runs if file is missing
+if not os.path.exists(MODEL_PATH):
+    if gdown:
+        os.makedirs(MODELS_DIR, exist_ok=True)
+        print(f"Model not found, downloading from Drive to {MODEL_PATH}...")
+        gdown.download(DRIVE_URL, MODEL_PATH, quiet=False)
+    else:
+        print(f"Model not found at {MODEL_PATH} and gdown not installed. Please download manually from {DRIVE_URL}")
 
 class WasteClassifier:
     def __init__(self):
@@ -29,14 +42,9 @@ class WasteClassifier:
         print(f"Models directory: {MODELS_DIR}")
         print(f"Files found: {os.listdir(MODELS_DIR)}")
 
-        vit_weights_path = os.path.join(MODELS_DIR, 'vit_weights.weights.h5')
+        vit_weights_path = MODEL_PATH
         print(f"\nChecking ViT weights path: {vit_weights_path}")
         print(f"ViT file exists: {os.path.exists(vit_weights_path)}")
-        if not vit_weights_path.endswith('.weights.h5'):
-            print("WARNING: filename doesn't end in '.weights.h5' -- if this was "
-                  "saved with Keras 3's model.save_weights(), rename it to match "
-                  "exactly, or loading can silently take a different code path "
-                  "than the one that wrote it. See debug_predict.py.")
 
         if os.path.exists(vit_weights_path):
             try:
@@ -63,7 +71,7 @@ class WasteClassifier:
         print(f"Loaded {loaded_count}/1 models (ViT only)")
         for name, model in self.models.items():
             status = "Loaded" if model is not None else "Failed"
-            print(f"  {name}: {status}")
+            print(f" {name}: {status}")
         print("=" * 50)
 
     def predict(self, image, model_name='vit', show_xai=True):
@@ -110,7 +118,7 @@ class WasteClassifier:
         extractor = getattr(self, "_attn_extractor", None)
         if extractor is None:
             attn_tensors = [l.output for l in model.layers
-                            if l.name.endswith("_attn_scores")]      # 12 layers, in block order
+                            if l.name.endswith("_attn_scores")]
             extractor = tf.keras.Model(model.input, attn_tensors + [model.output])
             self._attn_extractor = extractor
         return extractor
@@ -122,27 +130,27 @@ class WasteClassifier:
 
             with tf.GradientTape() as tape:
                 outputs = extractor(image, training=False)
-                attns, logits = outputs[:-1], outputs[-1]          # 12 x (1, H, N, N), (1, C)
+                attns, logits = outputs[:-1], outputs[-1]
                 class_idx = tf.argmax(logits[0])
                 score = logits[0][class_idx]
 
-            N = attns[0].shape[-1]                                 # 197
+            N = attns[0].shape[-1]
             R = tf.eye(N)
 
             if method == "rollout":
                 for a in attns:
-                    a = tf.reduce_mean(a[0], axis=0)               # average heads -> (N, N)
-                    a = 0.5 * a + 0.5 * tf.eye(N)                  # add residual connection
+                    a = tf.reduce_mean(a[0], axis=0)
+                    a = 0.5 * a + 0.5 * tf.eye(N)
                     a = a / tf.reduce_sum(a, axis=-1, keepdims=True)
                     R = tf.matmul(a, R)
             else:
-                grads = tape.gradient(score, attns)                # d(logit)/d(attention), per layer
+                grads = tape.gradient(score, attns)
                 for a, g in zip(attns, grads):
-                    cam = tf.reduce_mean(tf.nn.relu(a[0] * g[0]), axis=0)   # (N, N)
+                    cam = tf.reduce_mean(tf.nn.relu(a[0] * g[0]), axis=0)
                     R = R + tf.matmul(cam, R)
 
-            cls_to_patches = R[0, 1:].numpy()                      # CLS row, drop CLS column -> (196,)
-            g = int(np.sqrt(cls_to_patches.shape[0]))              # 14
+            cls_to_patches = R[0, 1:].numpy()
+            g = int(np.sqrt(cls_to_patches.shape[0]))
             heatmap = cls_to_patches.reshape(g, g)
 
             heatmap = cv2.resize(heatmap, (224, 224), interpolation=cv2.INTER_CUBIC)
@@ -152,4 +160,31 @@ class WasteClassifier:
 
         except Exception as e:
             print(f"Attention extraction failed: {e}")
+            return None
+
+    def get_grad_cam(self, model, image, class_idx):
+        # kept for compatibility if you add CNN models later
+        try:
+            last_conv = None
+            for layer in reversed(model.layers):
+                if isinstance(layer, tf.keras.layers.Conv2D):
+                    last_conv = layer.name
+                    break
+            if last_conv is None:
+                return None
+            grad_model = tf.keras.Model(
+                [model.inputs], [model.get_layer(last_conv).output, model.output]
+            )
+            with tf.GradientTape() as tape:
+                conv_outputs, predictions = grad_model(image)
+                loss = predictions[:, class_idx]
+            grads = tape.gradient(loss, conv_outputs)[0]
+            weights = tf.reduce_mean(grads, axis=(0, 1))
+            cam = tf.reduce_sum(tf.multiply(weights, conv_outputs[0]), axis=-1).numpy()
+            cam = np.maximum(cam, 0)
+            cam = cv2.resize(cam, (224, 224))
+            cam = (cam - cam.min()) / (cam.max() - cam.min() + 1e-8)
+            return cam.astype(np.float32)
+        except Exception as e:
+            print(f"Grad-CAM failed: {e}")
             return None
