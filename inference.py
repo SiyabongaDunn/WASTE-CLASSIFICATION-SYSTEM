@@ -13,16 +13,16 @@ from vit_model import build_vit_model
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODELS_DIR = os.path.join(BASE_DIR, 'models')
 MODEL_PATH = os.path.join(MODELS_DIR, 'vit_weights.weights.h5')
-DRIVE_URL = "https://drive.google.com/uc?id=1G6fg3M7USlyPf8ACqxkcoRHv7g8r8Erl"
+FILE_ID = "1G6fg3M7USlyPf8ACqxkcoRHv7g8r8Erl"
 
 # Auto-download for anyone cloning the repo - only runs if file is missing
 if not os.path.exists(MODEL_PATH):
     if gdown:
         os.makedirs(MODELS_DIR, exist_ok=True)
         print(f"Model not found, downloading from Drive to {MODEL_PATH}...")
-        gdown.download(DRIVE_URL, MODEL_PATH, quiet=False)
+        gdown.download(id=FILE_ID, output=MODEL_PATH, quiet=False, fuzzy=True)
     else:
-        print(f"Model not found at {MODEL_PATH} and gdown not installed. Please download manually from {DRIVE_URL}")
+        print(f"Model not found at {MODEL_PATH} and gdown not installed.")
 
 class WasteClassifier:
     def __init__(self):
@@ -76,21 +76,15 @@ class WasteClassifier:
 
     def predict(self, image, model_name='vit', show_xai=True):
         processed_image = preprocess_image(image)
-
         model = self.models.get(model_name)
         if model is None:
             available = [k for k, v in self.models.items() if v is not None]
-            raise ValueError(
-                f"Model '{model_name}' not loaded. "
-                f"Available models: {available}"
-            )
+            raise ValueError(f"Model '{model_name}' not loaded. Available models: {available}")
 
         logits = model.predict(processed_image, verbose=0)[0]
-
         shifted = logits - np.max(logits)
         exp = np.exp(shifted)
         predictions = exp / exp.sum()
-
         pred_class = int(np.argmax(predictions))
         confidence = float(predictions[pred_class])
 
@@ -114,11 +108,9 @@ class WasteClassifier:
         return result
 
     def _get_attn_extractor(self, model):
-        """Build (once) a model that outputs all 12 attention maps plus the logits."""
         extractor = getattr(self, "_attn_extractor", None)
         if extractor is None:
-            attn_tensors = [l.output for l in model.layers
-                            if l.name.endswith("_attn_scores")]
+            attn_tensors = [l.output for l in model.layers if l.name.endswith("_attn_scores")]
             extractor = tf.keras.Model(model.input, attn_tensors + [model.output])
             self._attn_extractor = extractor
         return extractor
@@ -127,16 +119,13 @@ class WasteClassifier:
         try:
             extractor = self._get_attn_extractor(model)
             image = tf.convert_to_tensor(image, dtype=tf.float32)
-
             with tf.GradientTape() as tape:
                 outputs = extractor(image, training=False)
                 attns, logits = outputs[:-1], outputs[-1]
                 class_idx = tf.argmax(logits[0])
                 score = logits[0][class_idx]
-
             N = attns[0].shape[-1]
             R = tf.eye(N)
-
             if method == "rollout":
                 for a in attns:
                     a = tf.reduce_mean(a[0], axis=0)
@@ -148,22 +137,18 @@ class WasteClassifier:
                 for a, g in zip(attns, grads):
                     cam = tf.reduce_mean(tf.nn.relu(a[0] * g[0]), axis=0)
                     R = R + tf.matmul(cam, R)
-
             cls_to_patches = R[0, 1:].numpy()
             g = int(np.sqrt(cls_to_patches.shape[0]))
             heatmap = cls_to_patches.reshape(g, g)
-
             heatmap = cv2.resize(heatmap, (224, 224), interpolation=cv2.INTER_CUBIC)
             heatmap = np.maximum(heatmap, 0)
             heatmap = (heatmap - heatmap.min()) / (heatmap.max() - heatmap.min() + 1e-8)
             return heatmap.astype(np.float32)
-
         except Exception as e:
             print(f"Attention extraction failed: {e}")
             return None
 
     def get_grad_cam(self, model, image, class_idx):
-        # kept for compatibility if you add CNN models later
         try:
             last_conv = None
             for layer in reversed(model.layers):
@@ -172,9 +157,7 @@ class WasteClassifier:
                     break
             if last_conv is None:
                 return None
-            grad_model = tf.keras.Model(
-                [model.inputs], [model.get_layer(last_conv).output, model.output]
-            )
+            grad_model = tf.keras.Model([model.inputs], [model.get_layer(last_conv).output, model.output])
             with tf.GradientTape() as tape:
                 conv_outputs, predictions = grad_model(image)
                 loss = predictions[:, class_idx]
