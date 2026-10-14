@@ -121,6 +121,36 @@ Then open the local URL shown in your terminal (usually `http://localhost:8501`)
 
 ---
 
+Repository Structure
+```
+WASTE-CLASSIFICATION-SYSTEM
+├── data/
+│   └── raw/garbage-classification/ 
+│
+├── models/
+│   └── vit_weights.weights.h5
+│
+├── notebooks/
+│   └── Full_Pipeline.ipynb
+│
+├── sortlight_frontend/
+│   └── index.html
+│
+├── venv/
+├── .gitignore
+├── inference.py
+├── launcher.py
+├── sortlight_component.py
+├── utils.py
+├── app.py
+├── config.yaml
+├── LICENSE
+├── README.md
+└── requirements.txt
+
+```
+---
+
 ## Dataset
 
 This project uses the [TrashNet](https://www.kaggle.com/datasets/asdasdasasdas/garbage-classification) dataset. The dataset is not redistributed here; download it from the original source if you wish to retrain or re-evaluate the models.
