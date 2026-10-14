@@ -16,22 +16,22 @@ MODEL_PATH = os.path.join(MODELS_DIR, 'vit_weights.weights.h5')
 FILE_ID = "1G6fg3M7USlyPf8ACqxkcoRHv7g8r8Erl"
 
 def download_model_if_needed():
-    """Download model from Drive if missing - handles 330MB virus scan warning"""
+    if os.path.exists(MODEL_PATH):
+        # If file is < 50MB, it's the HTML virus warning page, delete it
+        size = os.path.getsize(MODEL_PATH)
+        if size < 50_000_000:
+            print(f"Bad file detected (size {size} bytes), deleting and re-downloading...")
+            os.remove(MODEL_PATH)
+    
     if not os.path.exists(MODEL_PATH):
         if gdown:
             os.makedirs(MODELS_DIR, exist_ok=True)
-            print(f"Model not found, downloading to {MODEL_PATH}...")
-            url = f"https://drive.google.com/uc?id={FILE_ID}"
-            try:
-                gdown.download(url, MODEL_PATH, quiet=False, fuzzy=True)
-                print("Download complete!")
-            except Exception as e:
-                print(f"Download failed: {e}")
-                raise
+            print(f"Downloading real model to {MODEL_PATH}...")
+            # This format with id= + fuzzy works for 330MB files
+            gdown.download(id=FILE_ID, output=MODEL_PATH, quiet=False, fuzzy=True)
+            print(f"Downloaded size: {os.path.getsize(MODEL_PATH)} bytes")
         else:
-            print(f"Model missing at {MODEL_PATH} and gdown not installed")
-            raise FileNotFoundError(f"Model not found at {MODEL_PATH}")
-
+            raise FileNotFoundError(f"Model not found")
 class WasteClassifier:
     def __init__(self):
         self.models = {}
