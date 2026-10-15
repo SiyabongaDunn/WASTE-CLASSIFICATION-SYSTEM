@@ -80,22 +80,27 @@ class WasteClassifier:
 
         print("=" * 50)
 
-    def predict(self, image, model_name='vit', show_xai=True):
+     def predict(self, image, model_name='vit', show_xai=True):
         processed_image = preprocess_image(image)
         model = self.models.get(model_name)
         if model is None:
-            available = [k for k, v in self.models.items() if v is not None]
-            raise ValueError(f"Model '{model_name}' not loaded. Available models: {available}")
+            raise ValueError(f"Model '{model_name}' not loaded. Available: {list(self.models.keys())}")
 
         preds = model.predict(processed_image, verbose=0)[0]
-        #... rest of your predict code stays same...
-        # Keep your existing get_top_classes etc below
-        from utils import get_top_classes
-        top_classes = get_top_classes(preds, 3)
+
+        # Get top 3 - manual, no utils bug
+        top_indices = np.argsort(preds)[::-1][:3]
+        top_classes = [(class_names[i], float(preds[i])) for i in top_indices]
+
         result = {
             "prediction": top_classes[0][0],
             "confidence": float(top_classes[0][1]),
             "top_3": top_classes,
             "probs": preds
         }
+
+        # XAI if needed - keep your existing XAI code below, or skip for now
+        # if show_xai:
+        #... your gradcam code...
+
         return result
