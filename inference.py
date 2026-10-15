@@ -1,9 +1,5 @@
 import os
-try:
-    import gdown
-except ImportError:
-    gdown = None
-
+from huggingface_hub import hf_hub_download
 import tensorflow as tf
 import numpy as np
 import cv2
@@ -13,30 +9,20 @@ from vit_model import build_vit_model
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODELS_DIR = os.path.join(BASE_DIR, 'models')
 MODEL_PATH = os.path.join(MODELS_DIR, 'vit_weights.weights.h5')
-FILE_ID = "1G6fg3M7USlyPf8ACqxkcoRHv7g8r8Erl"
+HF_REPO = "SiyabongaDunn/sortlight-vit"
 
 def download_model_if_needed():
-    # 1. Check if existing file is bad (HTML warning page is <1MB)
-    if os.path.exists(MODEL_PATH):
-        size = os.path.getsize(MODEL_PATH)
-        print(f"Found existing model file: {size} bytes")
-        if size < 50_000_000:  # Real file is ~330MB, fake is ~3KB
-            print(f"File too small ({size} bytes) - deleting bad HTML file")
-            os.remove(MODEL_PATH)
-    
-    # 2. Download real file if missing
     if not os.path.exists(MODEL_PATH):
         os.makedirs(MODELS_DIR, exist_ok=True)
-        if gdown:
-            print(f"Downloading REAL model from Drive ID {FILE_ID}...")
-            # This exact call works for >100MB files on gdown 4.7.1
-            gdown.download(id=FILE_ID, output=MODEL_PATH, quiet=False, fuzzy=True)
-            new_size = os.path.getsize(MODEL_PATH)
-            print(f"Download finished. New size: {new_size} bytes")
-            if new_size < 50_000_000:
-                raise ValueError(f"Download failed - got {new_size} bytes (expected >300MB). File is HTML warning page.")
-        else:
-            raise FileNotFoundError("gdown not installed")
+        print(f"Downloading from {HF_REPO}...")
+        path = hf_hub_download(repo_id=HF_REPO, filename="vit_weights.weights.h5", local_dir=MODELS_DIR, local_dir_use_symlinks=False)
+        # Move to expected path if needed
+        if path != MODEL_PATH:
+            import shutil
+            if os.path.exists(MODEL_PATH):
+                os.remove(MODEL_PATH)
+            shutil.move(path, MODEL_PATH)
+        print(f"Downloaded {os.path.getsize(MODEL_PATH)} bytes")
 class WasteClassifier:
     def __init__(self):
         self.models = {}
