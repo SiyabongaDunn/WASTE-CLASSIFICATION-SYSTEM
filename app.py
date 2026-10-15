@@ -42,81 +42,35 @@ def heatmap_to_png_b64(heatmap: np.ndarray) -> str:
 
 
 def build_result_for_component(result: dict) -> dict:
-    # FIXED - handles your inference.py return format
-    # result is like {"label": "trash", "confidence": 0.94, "top3": [...]}
-    
-    # Get predictions safely
+    """
+    FINAL FIXED VERSION - works with new inference.py
+    result contains: label, confidence, predictions/top3, latency_ms, attention_map
+    """
+    # result["predictions"] now exists!
     if "predictions" in result:
-        preds = result["predictions"]
+        top3_raw = result["predictions"]
     elif "top3" in result:
-        # Convert top3 to predictions format
-        preds = result["top3"]
-    elif "label" in result:
-        # Single prediction
-        preds = [result]
+        top3_raw = result["top3"]
     else:
-        preds = []
+        top3_raw = [{"class": result.get("label", "unknown"), "confidence": result.get("confidence", 0)}]
 
-    predictions = np.array([preds]) if len(preds) > 0 else np.array([[]])
-    
-    # Get top classes safely
-    try:
-        top_classes = get_top_classes(predictions)
-    except:
-        # Fallback - use top3 directly if available
-        if "top3" in result:
-            top_classes = [{"class": x.get("label", x.get("class")), "confidence": x.get("confidence", 0)} for x in result["top3"]]
-        else:
-            top_classes = [{"class": result.get("label", "unknown"), "confidence": result.get("confidence", 0)}]
-
+    # Normalize to [{"class": ..., "confidence": ...}]
     top3 = []
-    for c in top_classes[:3] if isinstance(top_classes, list) else []:
-        if isinstance(c, dict):
-            cls = c.get("class") or c.get("label") or "unknown"
-            conf = c.get("confidence") or c.get("prob") or 0
-            top3.append({"class": cls, "confidence": float(conf)})
+    for item in top3_raw[:3]:
+        if isinstance(item, dict):
+            cls = item.get("class") or item.get("label") or "unknown"
+            conf = item.get("confidence") or item.get("prob") or 0.0
+            top3.append({"class": str(cls), "confidence": float(conf)})
 
-    if not top3 and "label" in result:
-        top3 = [{"class": result["label"], "confidence": float(result.get("confidence", 0))}]
-    
+    if not top3:
+        top3 = [{"class": "unknown", "confidence": 0.0}]
+
     return {
-        "predicted_class": top3[0]["class"] if top3 else "unknown",
-        "confidence": top3[0]["confidence"] if top3 else 0,
+        "predicted_class": top3[0]["class"],
+        "confidence": top3[0]["confidence"],
         "top3": top3,
         "predictions": top3,
-        "latency_ms": result.get("latency_ms", 0)
+        "latency_ms": result.get("latency_ms", 0),
+        "attention_map": result.get("attention_map"),
+        "original": result.get("original")
     }
-
-
-if "sortlight_result" not in st.session_state:
-    st.session_state.sortlight_result = None
-if "sortlight_last_action_id" not in st.session_state:
-    st.session_state.sortlight_last_action_id = None
-
-value = sortlight_ui(
-    class_names=class_names,
-    class_colors=CLASS_COLORS,
-    model_version="ViT (50% unfreeze)",
-    result=st.session_state.sortlight_result,
-    key="sortlight",
-)
-
-if value and value.get("action") == "classify":
-    action_id = value.get("action_id")
-
-    if action_id != st.session_state.sortlight_last_action_id:
-        st.session_state.sortlight_last_action_id = action_id
-
-        image_bytes = base64.b64decode(value["image_b64"])
-        image = Image.open(io.BytesIO(image_bytes))
-        show_xai = value.get("show_xai", True)
-
-        with st.spinner("Classifying..."):
-            start_time = time.time()
-            result = classifier.predict(image, "vit", show_xai)
-            result["latency_ms"] = (time.time() - start_time) * 1000
-
-        component_result = build_result_for_component(result)
-        component_result["action_id"] = action_id
-        st.session_state.sortlight_result = component_result
-        st.rerun()
