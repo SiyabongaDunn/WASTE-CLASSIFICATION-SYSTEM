@@ -1,9 +1,8 @@
-streamlit==1.39.0
-tensorflow==2.15.0
-numpy==1.26.4
-opencv-python-headless==4.9.0.80
-Pillow==10.4.0
-huggingface_hub==0.26.2
-matplotlib==3.8.4
-PyYAML==6.0.2
-scikit-learn==1.5.2
+streamlit
+tensorflow
+numpy
+opencv-python-headless
+Pillow
+huggingface_hub
+matplotlib
+PyYAML
