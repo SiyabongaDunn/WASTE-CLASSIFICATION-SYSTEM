@@ -13,34 +13,30 @@ MODEL_PATH = os.path.join(MODELS_DIR, 'vit_weights.weights.h5')
 HF_REPO = "SiyabongaDunn/sortlight-vit"
 
 def download_model_if_needed():
-    # If valid file already exists, skip download
     if os.path.exists(MODEL_PATH):
-        size = os.path.getsize(MODEL_PATH)
-        if size > 1000000: # >1MB means real file
-            print(f"Model already exists: {size} bytes")
-            return
-
+        try:
+            size = os.path.getsize(MODEL_PATH)
+            if size > 1000000:
+                print(f"Model already exists: {size} bytes")
+                return
+        except:
+            pass
     os.makedirs(MODELS_DIR, exist_ok=True)
     print(f"Downloading model from {HF_REPO}...")
-
-    # Download to MODELS_DIR
     downloaded_path = hf_hub_download(
         repo_id=HF_REPO,
         filename="vit_weights.weights.h5",
         local_dir=MODELS_DIR,
         local_dir_use_symlinks=False
     )
-
-    # If HF put it in a subfolder, move it
-    if downloaded_path!= MODEL_PATH:
+    if downloaded_path != MODEL_PATH:
         if os.path.exists(MODEL_PATH):
             os.remove(MODEL_PATH)
         shutil.move(downloaded_path, MODEL_PATH)
-
     if os.path.exists(MODEL_PATH):
-        print(f"Model ready: {os.path.getsize(MODEL_PATH)} bytes at {MODEL_PATH}")
+        print(f"Model ready: {os.path.getsize(MODEL_PATH)} bytes")
     else:
-        print(f"ERROR: Download failed, file not at {MODEL_PATH}")
+        print("ERROR: Download failed")
 
 download_model_if_needed()
 
@@ -54,53 +50,43 @@ class WasteClassifier:
         print("Loading models...")
         print(f"Models directory: {MODELS_DIR}")
         if os.path.exists(MODELS_DIR):
-            print(f"Files found: {os.listdir(MODELS_DIR)}")
-
+            try:
+                print(f"Files found: {os.listdir(MODELS_DIR)}")
+            except:
+                pass
         vit_weights_path = MODEL_PATH
-        print(f"\nChecking ViT weights path: {vit_weights_path}")
+        print(f"Checking ViT weights path: {vit_weights_path}")
         print(f"ViT file exists: {os.path.exists(vit_weights_path)}")
-
         if not os.path.exists(vit_weights_path):
             print(f"ViT model file not found at: {vit_weights_path}")
             print("Loaded 0/1 models (ViT only)")
             return
-
         try:
-            print(f"Building ViT model...")
+            print("Building ViT model...")
             model = build_vit_model()
             print(f"Loading weights from {vit_weights_path}...")
             model.load_weights(vit_weights_path)
             self.models['vit'] = model
-            print(f"vit: Loaded successfully!")
-            print(f"\nLoaded {len(self.models)}/1 models (ViT only)")
+            print("vit: Loaded successfully!")
+            print(f"Loaded {len(self.models)}/1 models (ViT only)")
         except Exception as e:
             print(f"vit: Failed - {e}")
             import traceback
             traceback.print_exc()
-
         print("=" * 50)
 
-     def predict(self, image, model_name='vit', show_xai=True):
+    def predict(self, image, model_name='vit', show_xai=True):
         processed_image = preprocess_image(image)
         model = self.models.get(model_name)
         if model is None:
             raise ValueError(f"Model '{model_name}' not loaded. Available: {list(self.models.keys())}")
-
         preds = model.predict(processed_image, verbose=0)[0]
-
-        # Get top 3 - manual, no utils bug
         top_indices = np.argsort(preds)[::-1][:3]
         top_classes = [(class_names[i], float(preds[i])) for i in top_indices]
-
         result = {
             "prediction": top_classes[0][0],
             "confidence": float(top_classes[0][1]),
             "top_3": top_classes,
             "probs": preds
         }
-
-        # XAI if needed - keep your existing XAI code below, or skip for now
-        # if show_xai:
-        #... your gradcam code...
-
         return result
