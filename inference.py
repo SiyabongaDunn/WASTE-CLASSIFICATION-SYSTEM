@@ -16,22 +16,27 @@ MODEL_PATH = os.path.join(MODELS_DIR, 'vit_weights.weights.h5')
 FILE_ID = "1G6fg3M7USlyPf8ACqxkcoRHv7g8r8Erl"
 
 def download_model_if_needed():
+    # 1. Check if existing file is bad (HTML warning page is <1MB)
     if os.path.exists(MODEL_PATH):
-        # If file is < 50MB, it's the HTML virus warning page, delete it
         size = os.path.getsize(MODEL_PATH)
-        if size < 50_000_000:
-            print(f"Bad file detected (size {size} bytes), deleting and re-downloading...")
+        print(f"Found existing model file: {size} bytes")
+        if size < 50_000_000:  # Real file is ~330MB, fake is ~3KB
+            print(f"File too small ({size} bytes) - deleting bad HTML file")
             os.remove(MODEL_PATH)
     
+    # 2. Download real file if missing
     if not os.path.exists(MODEL_PATH):
+        os.makedirs(MODELS_DIR, exist_ok=True)
         if gdown:
-            os.makedirs(MODELS_DIR, exist_ok=True)
-            print(f"Downloading real model to {MODEL_PATH}...")
-            # This format with id= + fuzzy works for 330MB files
+            print(f"Downloading REAL model from Drive ID {FILE_ID}...")
+            # This exact call works for >100MB files on gdown 4.7.1
             gdown.download(id=FILE_ID, output=MODEL_PATH, quiet=False, fuzzy=True)
-            print(f"Downloaded size: {os.path.getsize(MODEL_PATH)} bytes")
+            new_size = os.path.getsize(MODEL_PATH)
+            print(f"Download finished. New size: {new_size} bytes")
+            if new_size < 50_000_000:
+                raise ValueError(f"Download failed - got {new_size} bytes (expected >300MB). File is HTML warning page.")
         else:
-            raise FileNotFoundError(f"Model not found")
+            raise FileNotFoundError("gdown not installed")
 class WasteClassifier:
     def __init__(self):
         self.models = {}
