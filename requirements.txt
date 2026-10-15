@@ -1,6 +1,6 @@
-streamlit
-tensorflow-cpu==2.16.1
+huggingface_hub==0.26.2
 opencv-python-headless==4.9.0.80
+tensorflow-cpu==2.16.1
 pillow==10.4.0
 numpy==1.26.4
-gdown==4.7.1
+streamlit==1.60.0
