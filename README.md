@@ -1,284 +1,191 @@
-# WASTE-CLASSIFICATION-SYSTEM
+# Vision Transformer Architecture for Enhanced Global Feature Extraction in Automated Waste Sorting and Sustainability
 
-**Automated Waste Classification using Vision Transformers vs CNNs with Explainable AI - SortLight Deployment**
+## Authors
 
-[Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)
-[TensorFlow 2.20](https://img.shields.io/badge/TensorFlow-2.20-orange)
-[Streamlit 1.35](https://img.shields.io/badge/Streamlit-1.35-red)
-[License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
-
-**Authors:** Siyabonga Dunn (223017814) & Alunge Hlubi (223019985)  
-**Supervisor:** Dr. Andronicus Ayobami Akinyelu  
-**Institution:** University of KwaZulu-Natal | School of Mathematics, Statistics and Computer Science  
-**Academic Year:** 2025/2026
-
-> **Deployment Status:** ✅ ViT Loaded Successfully | `localhost:8501` | Demo: Hennessy Box → 84.2% Cardboard
+| Name | Email |
+|---|---|
+| Siyabonga Dunn | [223017814@stu.ukzn.ac.za](mailto:223017814@stu.ukzn.ac.za) |
+| Alunge Hlubi | [223019985@stu.ukzn.ac.za](mailto:223019985@stu.ukzn.ac.za) |
 
 ---
 
-## 1. Research Overview
+## Overview
 
-Global municipal waste is projected to reach **3.4 billion tonnes by 2050** (World Bank). South Africa generates ~122M tonnes annually, with <10% recycled due to manual sorting inefficiency.
+The increasing volume and complexity of solid waste present significant challenges for efficient recycling and automated waste-sorting systems. Computer vision is now a core component of automated sorting, with convolutional neural networks (CNNs) widely applied to waste image classification. However, the local receptive-field structure of CNNs can limit their ability to capture global spatial relationships in images containing overlapping, occluded, or visually ambiguous waste items.
 
-Existing sorting systems use CNNs that classify by **local texture** - patch by patch. This fails on visually similar waste like clear **Glass vs PET Plastic** or crumpled **Paper vs Cardboard**.
+Vision Transformers (ViTs) offer an alternative: self-attention models relationships between image regions globally. This project investigates the effectiveness of a pretrained **ViT-B/16** for automated waste classification on the **TrashNet** dataset and compares it against **ResNet50V2** and **MobileNetV2** CNN baselines. It also examines how **targeted augmentation** and **class-balanced oversampling** affect the underrepresented *Trash* category.
 
-**Research Question:** *Does global self-attention (ViT) outperform local convolution (CNN) for recyclable waste classification?*
+The best-performing model, an oversampled ViT, is deployed in a Streamlit web application that returns a prediction, a confidence score, and an attention heatmap.
 
-We implement and compare 3 models on 6 recyclable categories:
+---
 
-| Model | Architecture | Params | Input | Best Test Accuracy | F1-Macro | Inference Time |
-|---|---|---|---|---|---|---|
-| **ViT-base-patch16-224** | Transformer (12 layers, 12 heads, 768 dim) | ~86M | 224x224 | **94.3%** | **0.9145** | ~210ms |
-| ResNet50V2 | Deep Residual CNN | ~25M | 224x224 | 91.1% | 0.889 | ~95ms |
-| MobileNetV2 | Lightweight CNN (Depthwise Separable) | ~3.4M | 224x224 | 89.4% | 0.872 | ~32ms |
+## Key Results
 
-ViT trained with AdamW (lr=3e-4), weight decay 0.05, label smoothing 0.1, RandAugment, early stopping, 50 epochs.
+| ViT-B/16 Configuration | Test Accuracy | Macro F1 |
+|---|---|---|
+| Baseline (two-stage fine-tuning, augmentation, class weights) | 91.3% | 0.885 |
+| Targeted augmentation (Trash class only) | 89.7% | 0.874 |
+| **Class-balanced oversampling (best)** | **94.3%** | **0.915** |
 
-### Why This Matters for SA
-- Automates recycling at source (households, campus bins)
-- Reduces contamination in recycling streams
-- Lightweight MobileNetV2 version for edge devices (Raspberry Pi sorting bin)
+- Class-balanced oversampling gave the strongest overall result.
+- Targeted augmentation did not improve on the baseline.
+- Per-class F1 scores, confusion matrices, McNemar's test results, and the ResNet50V2 / MobileNetV2 comparisons are reported in the full paper.
 
-## 2. Dataset
+---
 
-**Kaggle - Garbage Classification Dataset**  
-Source: https://www.kaggle.com/datasets/asdasdasasdas/garbage-classification  
-Total: **2,527 images** across 6 classes
+## Research Questions
 
-| Class | Count | % | Challenge |
-|---|---|---|---|
-| Cardboard | 403 | 15.9% | Boxes, packaging, Hennessy box |
-| Glass | 501 | 19.8% | Clear bottles vs plastic confusion |
-| Metal | 410 | 16.2% | Cans, foil, tins |
-| Paper | 594 | 23.5% | Newspaper, office paper, magazines |
-| Plastic | 482 | 19.1% | PET bottles, bags, containers |
-| Trash | 137 | 5.4% | Non-recyclable, most confused, imbalanced |
+1. Can a transfer-learned ViT classify waste effectively on a small dataset?
+2. How does its performance compare with ResNet50V2 and MobileNetV2?
+3. Do targeted augmentation and class-balanced oversampling improve results on the underrepresented *Trash* class?
+4. Are model decisions interpretable, and do they rely on relevant object features rather than background noise?
 
-**Preprocessing (`utils.py`):**
-- Resize to 224x224, normalization to [-1, 1]
-- Stratified split: 70% Train / 15% Validation / 15% Test
-- Augmentation: rotation ±20°, horizontal flip, zoom 0.2, color jitter
-- Class imbalance handled via class weights
+---
 
-> `data/` folder is gitignored per UKZN policy (large binaries). Download original Kaggle set and extract to `data/`.
+## Methodology
 
-## 3. SortLight - Real-Time Deployment System
+| Component | Details |
+|---|---|
+| **Dataset** | TrashNet, 6 classes (cardboard, glass, metal, paper, plastic, trash), 2,527 images |
+| **Data split** | 80% training pool, 20% untouched test set (506 images) |
+| **Validation** | Stratified 5-fold cross-validation on the training pool |
+| **Models** | ViT-B/16 (pretrained, transfer learning), ResNet50V2, MobileNetV2 |
+| **Imbalance strategies** | Targeted augmentation, class-balanced oversampling |
+| **Metrics** | Accuracy, precision, recall, macro F1, per-class F1, confusion matrices |
+| **Statistical testing** | McNemar's test |
+| **Explainability** | ViT attention visualization; Grad-CAM for CNNs |
 
-This repo includes **SortLight**, a Streamlit-based deployable frontend for real-time inference - not just training notebooks.
+---
 
-**Pipeline:**
-```
-Camera / Upload → Streamlit (app.py) → WasteClassifier (inference.py) → ViT/CNN Model → Prediction + Confidence + XAI Heatmap → User
-```
+## Explainability
 
-**Features:**
-- Drag-and-drop or live webcam input
-- Model selector: ViT / ResNet50V2 / MobileNetV2
-- Confidence bar chart for all 6 classes
-- Top-3 predictions display
-- **Explainable AI (XAI) Toggle:**
-  - ViT: Attention Rollout + Chefer LRP (shows which patches model looked at - used in Hennessy Box demo)
-  - CNN: Grad-CAM (last conv layer heatmap)
-- Runs on CPU (no GPU needed for inference)
+| Model | Method | What it shows |
+|---|---|---|
+| ViT-B/16 | Attention visualization | Image regions the self-attention layers focus on |
+| ResNet50V2, MobileNetV2 | Grad-CAM | Regions that drive each CNN prediction |
 
-**Files:**
-- `app.py` - Main Streamlit app UI logic
-- `inference.py` - `WasteClassifier` class with auto-download fix
-- `vit_model.py` - Custom ViT with `_attn_scores` exposed for XAI
-- `sortlight_component.py` / `sortlight_frontend/` - Custom CSS/JS, SortLight branding
-- `launcher.py` / `main.py` - Training entry points
-- `utils.py` - `preprocess_image()`, `class_names` list
+Explainability is model-specific: each architecture needs a method suited to how it represents information.
 
-## 4. Installation & Quick Start (No Retraining Required)
+---
 
-This is the critical fix for `Available models: []`. Weights are **not** stored on GitHub (blocked by `.gitignore` - `*.h5` >100MB and GitHub 100MB limit). They are stored on Google Drive and auto-downloaded on first run via `gdown`.
+## Web Application Prototype
 
-### Steps:
+The oversampled ViT is integrated into a Streamlit application to demonstrate real-world deployment viability. For each uploaded image, the app displays:
+
+- The predicted waste class
+- A confidence score
+- An attention heatmap showing which regions influenced the prediction
+
+**Example:** When tested with a challenging image of a dirty, folded tissue, the model classified it as **Trash with 99.7% confidence** (Fig. 10 in the paper). The heatmap localized the object's irregular textures, showing the model relied on relevant structural features rather than background noise, which makes for a functional and transparent workflow.
+
+---
+
+## Tech Stack
+
+- **Language:** Python
+- **Deep learning:** TensorFlow 2.20 / Keras 3.13 (native Keras ViT-B/16 implementation with pretrained weights transferred from HuggingFace)
+- **Training environment:** Google Colab
+- **Deployment:** Streamlit
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- Python 3.10 or later
+- Git
+
+### Installation
 
 ```bash
-# 1. Clone
+# Clone the repository
 git clone https://github.com/SiyabongaDunn/WASTE-CLASSIFICATION-SYSTEM.git
 cd WASTE-CLASSIFICATION-SYSTEM
 
-# 2. Create venv (recommended)
+# Create and activate a virtual environment
 python -m venv venv
-venv\Scripts\activate  # Windows
-# source venv/bin/activate  # Linux / Mac
+source venv/bin/activate        # Windows: venv\Scripts\activate
 
-# 3. Install dependencies
+# Install dependencies
 pip install -r requirements.txt
+```
 
-# 4. Run - first run will download ~330MB model automatically to models/
+### Run the Application
+
+```bash
 streamlit run app.py
 ```
 
-Open http://localhost:8501
+Then open the local URL shown in your terminal (usually `http://localhost:8501`), upload a waste image, and view the prediction and attention heatmap.
 
-**What happens automatically in `inference.py`:**
-```python
-import gdown
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, 'models', 'vit_weights.weights.h5')
-DRIVE_URL = "https://drive.google.com/uc?id=1G6fg3M7USlyPf8ACqxkcoRHv7g8r8Erl"
+---
 
-if not os.path.exists(MODEL_PATH):
-    os.makedirs("models", exist_ok=True)
-    print(f"Model not found, downloading from Drive to {MODEL_PATH}...")
-    gdown.download(DRIVE_URL, MODEL_PATH, quiet=False)
+### Repository Structure
 ```
-This fixed the `Available models: []` bug. `.gitignore` correctly blocks `*.h5`, `__pycache__/`, `data/`, `*.pyc`.
-
-> **UKZN Lab Note:** If `pip install` is blocked by Application Control Policy, the app will still run if `models/vit_weights.weights.h5` already exists in `models/` folder (copy it via USB).
-
-## 5. Training (Optional - Reproduce Results)
-
-If you want to retrain from scratch:
-
-```bash
-# Check config.yaml for hyperparameters
-python main.py --model vit --epochs 50 --batch_size 32 --lr 3e-4
-python main.py --model resnet50v2 --epochs 40
-python main.py --model mobilenetv2 --epochs 40
-```
-
-- Best checkpoint saved to `models/` as `vit_weights.weights.h5`, `resnet_weights.weights.h5`, etc.
-- Logs, accuracy/loss curves saved to `logs/`
-- Confusion matrices saved to `notebooks/evaluation.ipynb`
-- Configs editable in `config.yaml`
-
-## 6. Project Structure
+WASTE-CLASSIFICATION-SYSTEM
+├── data/
+│   └── raw/garbage-classification/ 
+│
+├── models/
+│   └── vit_weights.weights.h5
+│
+├── notebooks/
+│   └── Full_Pipeline.ipynb
+│
+├── sortlight_frontend/
+│   └── index.html
+│
+├── venv/
+├── .gitignore
+├── inference.py
+├── launcher.py
+├── sortlight_component.py
+├── utils.py
+├── app.py
+├── config.yaml
+├── LICENSE
+├── README.md
+└── requirements.txt
 
 ```
-WASTE-CLASSIFICATION-SYSTEM/
-├── app.py                         # Streamlit main app - SortLight UI
-├── inference.py                   # WasteClassifier with gdown auto-download fix (CRITICAL)
-├── vit_model.py                   # Custom ViT-base-patch16-224 with attention scores exposed
-├── utils.py                       # preprocess_image(), class_names = [cardboard, glass, ...]
-├── sortlight_component.py         # Custom Streamlit component
-├── launcher.py                    # Alternative launcher
-├── main.py                        # Training loop (fit, evaluate)
-├── config.yaml                    # Hyperparams: lr, epochs, batch, weight_decay
-├── requirements.txt               # FIXED: includes gdown==4.7.1, tensorflow==2.20.0
-├── .gitignore                     # Blocks data/, models/*.h5, __pycache__, *.pyc
-├── README.md                      # This file
-├── models/                        # GITIGNORED - auto-populates via gdown
-│   ├── vit_weights.weights.h5     # ~330MB - Downloaded from Drive ID 1G6fg3M...
-│   ├── resnet_weights.weights.h5  # (optional)
-│   └── mobilenet_weights.weights.h5
-├── data/                          # GITIGNORED - Kaggle dataset (2527 images)
-│   ├── cardboard/
-│   ├── glass/
-│   ├── metal/
-│   ├── paper/
-│   ├── plastic/
-│   └── trash/
-├── notebooks/                     # EDA, training curves, evaluation
-│   ├── eda.ipynb
-│   ├── training_vit.ipynb
-│   └── evaluation.ipynb
-├── sortlight_frontend/            # Frontend assets for Streamlit
-│   ├── style.css
-│   └── components/
-├── __pycache__/                   # GITIGNORED
-└── .vscode/                       # VS Code settings
-```
+---
 
-## 7. Results & Key Findings
+## Dataset
 
-### Quantitative:
-- ViT outperforms CNNs by ~3.2% accuracy because self-attention captures **long-range shape** (box folds vs paper crumples) vs local texture.
-- Paper (594 samples) easiest, Trash (137 samples) hardest due to imbalance.
-- Most confusion: Trash → Plastic / Glass (visually similar transparent bags).
+This project uses the [TrashNet](https://www.kaggle.com/datasets/asdasdasasdas/garbage-classification) dataset. The dataset is not redistributed here; download it from the original source if you wish to retrain or re-evaluate the models.
 
-### Qualitative (XAI):
-- ViT Attention Rollout on Hennessy Box (84.2% Cardboard): Focuses on edges, brown color, and Hennessy text logo - proves it learned shape semantics.
-- ResNet Grad-CAM on same image: Focuses only on brown texture, misses box structure (71% confidence).
-- MobileNetV2: Fastest (32ms) but confuses Paper vs Cardboard.
+---
 
-### Deployment Test:
-| Test Image | ViT | ResNet50V2 | Ground Truth |
-|---|---|---|---|
-| Hennessy Box (brown) | 84.2% Cardboard | 71.3% Cardboard | Cardboard ✅ |
-| Clear PET bottle | 91% Plastic | 78% Glass | Plastic ✅ |
-| Crushed paper | 88% Paper | 85% Paper | Paper ✅ |
+## Conclusions
 
-Full metrics, confusion matrices, attention maps in `notebooks/evaluation.ipynb` and `logs/`.
+- Transfer-learned ViTs show strong potential for small waste-classification datasets.
+- Data-balancing strategies matter: class-balanced oversampling clearly outperformed targeted augmentation.
+- Model-specific explainability supports transparent, trustworthy deployment.
 
-## 8. The Fix - Why `Available models: []` Happened
+---
 
-**Problem:** After pushing, app showed `Available models: []` on Streamlit.
-
-**Root Cause:**
-- `models/vit_weights.weights.h5` is 330MB > GitHub 100MB limit
-- `.gitignore` has `*.h5` and `data/` - correct for repo hygiene
-- So `git push` did NOT upload the model, only code
-- `inference.py` looked for `models/vit_weights.weights.h5`, didn't find it, loaded 0 models
-
-**Solution (Siyabonga Dunn - this commit):**
-1. Added `gdown>=4.7.1` to `requirements.txt`
-2. Modified `inference.py` to:
-   - Check if `MODEL_PATH` exists
-   - If not, auto-download from Google Drive `id=1G6fg3M7USlyPf8ACqxkcoRHv7g8r8Erl`
-   - Then load weights
-3. Now anyone cloning `main` can run `streamlit run app.py` without manual model placement
-
-This satisfies the deployment requirement for UKZN final demo.
-
-## 9. Requirements
-
-```txt
-gdown
-tensorflow==2.20.0
-keras==3.13.2
-streamlit>=1.35.0
-anyio>=4.0.0
-starlette>=0.27.0
-opencv-python>=4.8.0
-matplotlib>=3.7.0
-pillow>=10.4.0
-numpy>=1.24.0,<2.0.0
-pandas>=2.0.0
-seaborn>=0.12.0
-scikit-learn>=1.3.0
-pyyaml>=6.0
-tqdm>=4.65.0
-```
-
-- Python 3.12 (tested), 3.10+ should work
-- Works on CPU, GPU optional for training
-
-## 10. Acknowledgements & References
-
-- Supervisor: Dr. Andronicus Ayobami Akinyelu - UKZN
-- Dataset: Kaggle - Garbage Classification by asdasdasasdas
-- ViT Paper: Dosovitskiy et al. "An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale" (ICLR 2021)
-- ResNet: He et al. "Deep Residual Learning for Image Recognition"
-- MobileNetV2: Sandler et al.
-- XAI: Chefer et al. "Generic Attention-model Explainability for Interpreting Bi-Modal and Encoder-Decoder Transformers"
-- Streamlit, TensorFlow, OpenCV communities
-
-## 11. License & Citation
-
-MIT License - Free for academic use.
+## Citation
 
 If you use this work, please cite:
 
 ```bibtex
-@misc{dunn_hlubi_2025_waste,
-  author = {Dunn, Siyabonga and Hlubi, Alunge},
-  title = {WASTE-CLASSIFICATION-SYSTEM: Vision Transformer vs CNN for Automated Waste Classification with SortLight Deployment},
-  year = {2025},
+@unpublished{dunn2026vitwaste,
+  author      = {Dunn, Siyabonga and Hlubi, Alunge},
+  title       = {Vision Transformer Architecture for Enhanced Global Feature Extraction in Automated Waste Sorting and Sustainability},
   institution = {University of KwaZulu-Natal},
-  supervisor = {Akinyelu, Andronicus Ayobami},
-  url = {https://github.com/SiyabongaDunn/WASTE-CLASSIFICATION-SYSTEM}
+  year        = {2026}
 }
 ```
 
 ---
 
-**Maintainer:** Siyabonga Dunn - 223017814@stu.ukzn.ac.za  
-**GitHub:** https://github.com/SiyabongaDunn/WASTE-CLASSIFICATION-SYSTEM  
-**Branch:** `main` is stable and deployable - `streamlit run app.py`  
-**Last Working Demo:** 84.2% Cardboard (Hennessy Box) - ViT loaded successfully
+## License
 
+Released under the **MIT License**, free for academic use. See [`LICENSE`](LICENSE) for details.
 
+---
+
+## Acknowledgements
+
+We thank our supervisor, **Andronicus Ayobami Akinyelu**, for his guidance, the Discipline of Computer Science at the University of KwaZulu-Natal, and the creators of the TrashNet dataset.
