@@ -117,7 +117,7 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-Then open the local URL shown in your terminal (usually `http://localhost:8501`), upload a waste image, and view the prediction and attention heatmap.
+Then open the local URL shown in your terminal (usually `http://localhost:8501`), upload a waste image, and view the prediction and attention heatmap. Make sure you have pretrained [vit_weight](https://drive.google.com/file/d/1G6fg3M7USIyPf8ACqxkcoRHv7g8r8Erl/view?usp=drive_link) under models.
 
 ---
 
