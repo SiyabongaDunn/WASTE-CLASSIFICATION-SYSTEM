@@ -42,35 +42,60 @@ def heatmap_to_png_b64(heatmap: np.ndarray) -> str:
 
 
 def build_result_for_component(result: dict) -> dict:
-    """
-    FINAL FIXED VERSION - works with new inference.py
-    result contains: label, confidence, predictions/top3, latency_ms, attention_map
-    """
-    # result["predictions"] now exists!
-    if "predictions" in result:
-        top3_raw = result["predictions"]
-    elif "top3" in result:
-        top3_raw = result["top3"]
-    else:
-        top3_raw = [{"class": result.get("label", "unknown"), "confidence": result.get("confidence", 0)}]
+    predictions = np.array([result["predictions"]])
+    top_classes = get_top_classes(predictions)  # [{'class': ..., 'confidence': 0-1}, ...]
 
-    # Normalize to [{"class": ..., "confidence": ...}]
-    top3 = []
-    for item in top3_raw[:3]:
-        if isinstance(item, dict):
-            cls = item.get("class") or item.get("label") or "unknown"
-            conf = item.get("confidence") or item.get("prob") or 0.0
-            top3.append({"class": str(cls), "confidence": float(conf)})
+    top3 = [
+        {"key": item["class"], "conf": item["confidence"] * 100}
+        for item in top_classes
+    ]
 
-    if not top3:
-        top3 = [{"class": "unknown", "confidence": 0.0}]
-
-    return {
-        "predicted_class": top3[0]["class"],
-        "confidence": top3[0]["confidence"],
+    payload = {
+        "primary": result["class"],
+        "confidence": result["confidence"] * 100,
         "top3": top3,
-        "predictions": top3,
-        "latency_ms": result.get("latency_ms", 0),
-        "attention_map": result.get("attention_map"),
-        "original": result.get("original")
+        "interpretation": (
+            f"Predicted {result['class']} with "
+            f"{result['confidence'] * 100:.1f}% confidence."
+        ),
+        "latency_ms": result.get("latency_ms"),
     }
+
+    xai_image = result.get("xai_image")
+    if xai_image is not None:
+        payload["attention_image_b64"] = heatmap_to_png_b64(xai_image)
+
+    return payload
+
+if "sortlight_result" not in st.session_state:
+    st.session_state.sortlight_result = None
+if "sortlight_last_action_id" not in st.session_state:
+    st.session_state.sortlight_last_action_id = None
+
+value = sortlight_ui(
+    class_names=class_names,
+    class_colors=CLASS_COLORS,
+    model_version="ViT (50% unfreeze)",
+    result=st.session_state.sortlight_result,
+    key="sortlight",
+)
+
+if value and value.get("action") == "classify":
+    action_id = value.get("action_id")
+
+    if action_id != st.session_state.sortlight_last_action_id:
+        st.session_state.sortlight_last_action_id = action_id
+
+        image_bytes = base64.b64decode(value["image_b64"])
+        image = Image.open(io.BytesIO(image_bytes))
+        show_xai = value.get("show_xai", True)
+
+        with st.spinner("Classifying..."):
+            start_time = time.time()
+            result = classifier.predict(image, "vit", show_xai)
+            result["latency_ms"] = (time.time() - start_time) * 1000
+
+        component_result = build_result_for_component(result)
+        component_result["action_id"] = action_id
+        st.session_state.sortlight_result = component_result
+        st.rerun()

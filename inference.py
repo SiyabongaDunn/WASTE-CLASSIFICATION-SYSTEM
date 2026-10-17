@@ -1,5 +1,4 @@
 import os
-import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 import numpy as np
@@ -14,8 +13,8 @@ MODELS_DIR = os.path.join(BASE_DIR, 'models')
 
 class WasteClassifier:
     def __init__(self):
-        self.model = None
-        self._load()
+        self.models = {}
+        self.load_models()
 
     def load_models(self):
         """Load all trained models."""
@@ -153,51 +152,5 @@ class WasteClassifier:
             return heatmap.astype(np.float32)
 
         except Exception as e:
-            print(f"FP16 not found ({e}), downloading original 686 MB...")
-            from huggingface_hub import hf_hub_download
-            path = hf_hub_download(repo_id=HF_REPO_ID, filename=HF_FILENAME_ORIG, local_dir="models", local_dir_use_symlinks=False)
-            final_path = f"models/{HF_FILENAME_ORIG}"
-            if not os.path.exists(final_path):
-                for root,_,files in os.walk("models"):
-                    if HF_FILENAME_ORIG in files:
-                        import shutil
-                        shutil.copy(os.path.join(root, HF_FILENAME_ORIG), final_path)
-                        break
-            return final_path
-
-    def _load(self):
-        weights_path = self._ensure_weights()
-        print(f"Building ViT...")
-        model = build_vit_model(num_classes=len(CLASS_NAMES))
-        print(f"Loading weights from {weights_path} ({os.path.getsize(weights_path)/1024/1024:.1f} MB)...")
-        model.load_weights(weights_path)
-        print("vit: Loaded successfully!")
-        dummy = np.zeros((1, IMG_SIZE, IMG_SIZE, 3), dtype=np.float32)
-        _ = model.predict(dummy, verbose=0)
-        self.model = model
-        print("Loaded 1/1 models")
-
-    def preprocess(self, image):
-        if isinstance(image, np.ndarray): image = Image.fromarray(image)
-        image = image.convert("RGB").resize((IMG_SIZE, IMG_SIZE))
-        arr = np.array(image).astype(np.float32) / 255.0
-        return np.expand_dims(arr, 0), image
-
-    def predict(self, image, model_name="vit", show_xai=False):
-        x, orig = self.preprocess(image)
-        import time; s=time.time()
-        logits = self.model.predict(x, verbose=0)[0]
-        latency = (time.time()-s)*1000
-        exp_logits = np.exp(logits - np.max(logits))
-        probs = exp_logits / np.sum(exp_logits)
-        top_idx = np.argsort(probs)[::-1][:3]
-        top3 = [{"label": CLASS_NAMES[i], "class": CLASS_NAMES[i], "confidence": float(probs[i]), "prob": float(probs[i])} for i in top_idx]
-        return {"label": top3[0]["label"], "predicted_class": top3[0]["label"], "class": top3[0]["label"], "confidence": top3[0]["confidence"], "predictions": top3, "top3": top3, "probs": probs.tolist(), "latency_ms": latency, "attention_map": orig, "original": orig}
-
-_classifier=None
-def get_classifier():
-    global _classifier
-    if _classifier is None: _classifier = WasteClassifier()
-    return _classifier
-
-WasteClassifier=WasteClassifier
+            print(f"Attention extraction failed: {e}")
+            return None
