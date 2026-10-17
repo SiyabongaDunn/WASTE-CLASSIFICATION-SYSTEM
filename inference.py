@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 from utils import preprocess_image, class_names
-from vit_model import build_vit_model
+from vit_model import build_vit_model, load_vit_weights
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODELS_DIR = os.path.join(BASE_DIR, 'models')
@@ -44,7 +44,8 @@ class WasteClassifier:
                 self.models['vit'] = build_vit_model(num_classes=6)
 
                 print("Loading ViT weights...")
-                self.models['vit'].load_weights(vit_weights_path)
+                load_vit_weights(self.models['vit'], vit_weights_path) 
+                
                 print("ViT loaded successfully!")
 
                 dummy_input = np.random.randn(1, 224, 224, 3).astype(np.float32)
