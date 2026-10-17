@@ -1,7 +1,9 @@
 import base64
 import io
+import os
 import time
 
+import gdown
 import numpy as np
 import streamlit as st
 from PIL import Image
@@ -17,12 +19,58 @@ st.set_page_config(
     layout="wide"
 )
 
+# --- Weights download -------------------------------------------------------
+# Must match the path used in inference.py
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODELS_DIR = os.path.join(BASE_DIR, "models")
+WEIGHTS_PATH = os.path.join(MODELS_DIR, "vit_weights.weights.h5")
+WEIGHTS_FILE_ID = "1G6fg3M7USIyPf8ACqxkcoRHv7g8r8Erl"
+HDF5_MAGIC = b"\x89HDF\r\n\x1a\n"
+
+
+def _is_valid_h5(path: str) -> bool:
+    try:
+        with open(path, "rb") as f:
+            return f.read(8) == HDF5_MAGIC
+    except OSError:
+        return False
+
+
+def ensure_weights():
+    """Download the ViT weights from Google Drive if not already present."""
+    if os.path.exists(WEIGHTS_PATH) and _is_valid_h5(WEIGHTS_PATH):
+        return
+
+    os.makedirs(MODELS_DIR, exist_ok=True)
+    tmp_path = WEIGHTS_PATH + ".part"
+
+    with st.spinner("Downloading model weights (first run only)..."):
+        out = gdown.download(id=WEIGHTS_FILE_ID, output=tmp_path, quiet=False)
+
+    # Guard against Drive returning an HTML error page instead of the file
+    if out is None or not _is_valid_h5(tmp_path):
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+        st.error(
+            "Could not download the model weights. Make sure the Drive file "
+            "is shared as 'Anyone with the link'."
+        )
+        st.stop()
+
+    os.replace(tmp_path, WEIGHTS_PATH)  # appears under final name only when complete
+
+
+ensure_weights()
+
+
 @st.cache_resource
 def load_classifier():
     return WasteClassifier()
 
+
 classifier = load_classifier()
 
+# --- UI helpers -------------------------------------------------------------
 _DEFAULT_PALETTE = ["#c99b6a", "#5eead4", "#a9b4c6", "#e9e4d8", "#60a5fa", "#fb7185"]
 CLASS_COLORS = {}
 for i, name in enumerate(class_names):
@@ -66,6 +114,7 @@ def build_result_for_component(result: dict) -> dict:
         payload["attention_image_b64"] = heatmap_to_png_b64(xai_image)
 
     return payload
+
 
 if "sortlight_result" not in st.session_state:
     st.session_state.sortlight_result = None

@@ -6,3 +6,4 @@ Pillow
 huggingface_hub
 matplotlib
 protobuf==3.20.3
+gdown
