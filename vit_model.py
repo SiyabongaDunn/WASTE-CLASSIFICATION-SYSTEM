@@ -1,6 +1,7 @@
 import tensorflow as tf
 from tensorflow import keras
 import numpy as np
+import h5py
 
 IMG_SIZE = 224
 
@@ -133,3 +134,36 @@ def build_vit_model(num_classes=6):
 
     model = keras.Model(inputs=inputs, outputs=outputs)
     return model
+
+def _default(base, n):
+    return base if n == 0 else f"{base}_{n}"
+
+def _vit_layer_map(num_layers=12):
+    m = {
+        "patch_embed_proj": "conv2d",
+        "cls_token": "cls_token",
+        "pos_embed": "pos_embed",
+        "ln_final": _default("layer_normalization", 2 * num_layers),
+        "head_dense": _default("dense", 6 * num_layers),
+        "head_out": _default("dense", 6 * num_layers + 1),
+    }
+    for i in range(num_layers):
+        d = 6 * i
+        for j, n in enumerate(["attn_q", "attn_k", "attn_v", "attn_proj", "mlp_fc1", "mlp_fc2"]):
+            m[f"block_{i}_{n}"] = _default("dense", d + j)
+        m[f"block_{i}_ln1"] = _default("layer_normalization", 2 * i)
+        m[f"block_{i}_ln2"] = _default("layer_normalization", 2 * i + 1)
+    return m
+
+def load_vit_weights(model, path):
+    mapping = _vit_layer_map()
+    with h5py.File(path, "r") as f:
+        for layer_name, file_name in mapping.items():
+            layer = model.get_layer(layer_name)
+            grp = f["layers"][file_name]["vars"]
+            arrays = [grp[str(k)][()] for k in range(len(grp))]
+            for var, arr in zip(layer.weights, arrays):
+                if tuple(var.shape) != arr.shape:
+                    raise ValueError(f"{layer_name} <- {file_name}: {var.shape} vs {arr.shape}")
+            layer.set_weights(arrays)
+    print(f"Loaded {len(mapping)} layers from {path}")

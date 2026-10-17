@@ -1,109 +1,157 @@
 import os
 import numpy as np
 import tensorflow as tf
-import keras
-from PIL import Image
+from tensorflow import keras
+import numpy as np
+import matplotlib.pyplot as plt
+import cv2
+from utils import preprocess_image, class_names
+from vit_model import build_vit_model, load_vit_weights
 
-# ============================================================
-# CONFIG - NOW USING FP16 VERSION (343 MB instead of 686 MB)
-# ============================================================
-CLASS_NAMES = ["cardboard", "glass", "metal", "paper", "plastic", "trash"]
-IMG_SIZE = 224
-HF_REPO_ID = "SiyabongaDunn/sortlight-vit"
-HF_FILENAME_FP16 = "vit_weights_fp16.weights.h5"  # NEW 343 MB FILE
-HF_FILENAME_ORIG = "vit_weights.weights.h5"       # fallback
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODELS_DIR = os.path.join(BASE_DIR, 'models')
 
-print("\n" + "="*60)
-print("STEP 5: ViT BUILDING BLOCKS - EXACT COPY")
-print("="*60)
-
-def mlp_block(x, hidden_dim, out_dim, name):
-    x = keras.layers.Dense(hidden_dim, activation='gelu', name=f"{name}_fc1")(x)
-    x = keras.layers.Dense(out_dim, name=f"{name}_fc2")(x)
-    return x
-
-def attention_block(x, num_heads, head_dim, embed_dim, name):
-    q = keras.layers.Dense(embed_dim, use_bias=True, name=f"{name}_q")(x)
-    k = keras.layers.Dense(embed_dim, use_bias=True, name=f"{name}_k")(x)
-    v = keras.layers.Dense(embed_dim, use_bias=True, name=f"{name}_v")(x)
-    q = keras.layers.Reshape((-1, num_heads, head_dim), name=f"{name}_q_reshape")(q)
-    k = keras.layers.Reshape((-1, num_heads, head_dim), name=f"{name}_k_reshape")(k)
-    v = keras.layers.Reshape((-1, num_heads, head_dim), name=f"{name}_v_reshape")(v)
-    q = keras.layers.Permute((2, 1, 3), name=f"{name}_q_perm")(q)
-    k = keras.layers.Permute((2, 1, 3), name=f"{name}_k_perm")(k)
-    v = keras.layers.Permute((2, 1, 3), name=f"{name}_v_perm")(v)
-    scale = head_dim ** -0.5
-    attn = keras.layers.Lambda(lambda qk: keras.ops.softmax(keras.ops.matmul(qk[0], keras.ops.transpose(qk[1], (0,1,3,2))) * scale, axis=-1), name=f"{name}_attn_scores")([q, k])
-    out = keras.layers.Lambda(lambda av: keras.ops.matmul(av[0], av[1]), name=f"{name}_attn_out")([attn, v])
-    out = keras.layers.Permute((2, 1, 3), name=f"{name}_out_perm")(out)
-    out = keras.layers.Reshape((-1, embed_dim), name=f"{name}_out_reshape")(out)
-    out = keras.layers.Dense(embed_dim, use_bias=True, name=f"{name}_proj")(out)
-    return out
-
-def transformer_block(x, num_heads=12, embed_dim=768, mlp_dim=3072, name="block"):
-    y = keras.layers.LayerNormalization(epsilon=1e-6, name=f"{name}_ln1")(x)
-    y = attention_block(y, num_heads, head_dim=embed_dim//num_heads, embed_dim=embed_dim, name=f"{name}_attn")
-    x = keras.layers.Add(name=f"{name}_add1")([x, y])
-    y = keras.layers.LayerNormalization(epsilon=1e-6, name=f"{name}_ln2")(x)
-    y = mlp_block(y, hidden_dim=mlp_dim, out_dim=embed_dim, name=f"{name}_mlp")
-    x = keras.layers.Add(name=f"{name}_add2")([x, y])
-    return x
-
-def build_vit_model(num_classes=6):
-    num_patches = (IMG_SIZE // 16) ** 2
-    seq_len = num_patches + 1
-    embed_dim = 768
-    inputs = keras.Input(shape=(IMG_SIZE, IMG_SIZE, 3), name="pixel_values")
-    patches = keras.layers.Conv2D(filters=embed_dim, kernel_size=16, strides=16, padding='valid', use_bias=True, name="patch_embed_proj")(inputs)
-    patches = keras.layers.Reshape((num_patches, embed_dim), name="patch_embed_reshape")(patches)
-    class CLSToken(keras.layers.Layer):
-        def build(self, input_shape): self.cls = self.add_weight(name="cls", shape=(1,1,embed_dim), initializer="zeros", trainable=True)
-        def call(self, x): return keras.ops.broadcast_to(self.cls, (keras.ops.shape(x)[0], 1, embed_dim))
-    class PosEmbed(keras.layers.Layer):
-        def build(self, input_shape): self.pos = self.add_weight(name="pos", shape=(1,seq_len,embed_dim), initializer="zeros", trainable=True)
-        def call(self, x): return x + self.pos
-    cls_tokens = CLSToken(name="cls_token")(patches)
-    x = keras.layers.Concatenate(axis=1, name="cls_concat")([cls_tokens, patches])
-    x = PosEmbed(name="pos_embed")(x)
-    for i in range(12): x = transformer_block(x, name=f"block_{i}")
-    x = keras.layers.LayerNormalization(epsilon=1e-6, name="ln_final")(x)
-    cls_out = keras.layers.Lambda(lambda t: t[:,0,:], name="cls_extract")(x)
-    z = keras.layers.Dense(256, activation='relu', name="head_dense")(cls_out)
-    z = keras.layers.Dropout(0.3, name="head_dropout")(z)
-    outputs = keras.layers.Dense(num_classes, name="head_out")(z)
-    return keras.Model(inputs=inputs, outputs=outputs)
-
-print("ViT builder ready")
 
 class WasteClassifier:
     def __init__(self):
         self.model = None
         self._load()
 
-    def _ensure_weights(self):
-        os.makedirs("models", exist_ok=True)
-        # Try FP16 first (343 MB), then original
-        for fname in [HF_FILENAME_FP16, HF_FILENAME_ORIG]:
-            local_path = f"models/{fname}"
-            if os.path.exists(local_path) and os.path.getsize(local_path) > 10_000_000:
-                print(f"Found {fname}: {os.path.getsize(local_path)/1024/1024:.1f} MB")
-                return local_path
-        
-        # Download - prefer FP16
-        print(f"Trying to download {HF_FILENAME_FP16} (343 MB)...")
+    def load_models(self):
+        """Load all trained models."""
+        print("=" * 50)
+        print("Loading models...")
+        print("=" * 50)
+
+        if not os.path.exists(MODELS_DIR):
+            print(f"ERROR: Models directory not found at {MODELS_DIR}")
+            return
+
+        print(f"Models directory: {MODELS_DIR}")
+        print(f"Files found: {os.listdir(MODELS_DIR)}")
+
+        vit_weights_path = os.path.join(MODELS_DIR, 'vit_weights.weights.h5')
+        print(f"\nChecking ViT weights path: {vit_weights_path}")
+        print(f"ViT file exists: {os.path.exists(vit_weights_path)}")
+        if not vit_weights_path.endswith('.weights.h5'):
+            print("WARNING: filename doesn't end in '.weights.h5' -- if this was "
+                  "saved with Keras 3's model.save_weights(), rename it to match "
+                  "exactly, or loading can silently take a different code path "
+                  "than the one that wrote it. See debug_predict.py.")
+
+        if os.path.exists(vit_weights_path):
+            try:
+                print("\nBuilding ViT architecture...")
+                self.models['vit'] = build_vit_model(num_classes=6)
+
+                print("Loading ViT weights...")
+                load_vit_weights(self.models['vit'], vit_weights_path) 
+                
+                print("ViT loaded successfully!")
+
+                dummy_input = np.random.randn(1, 224, 224, 3).astype(np.float32)
+                test_output = self.models['vit'].predict(dummy_input, verbose=0)
+                print(f"ViT test output shape: {test_output.shape}")
+
+            except Exception as e:
+                print(f"ViT load failed: {e}")
+                self.models['vit'] = None
+        else:
+            print(f"ViT model file not found at: {vit_weights_path}")
+            self.models['vit'] = None
+
+        print("\n" + "-" * 50)
+        loaded_count = sum(1 for m in self.models.values() if m is not None)
+        print(f"Loaded {loaded_count}/1 models (ViT only)")
+        for name, model in self.models.items():
+            status = "Loaded" if model is not None else "Failed"
+            print(f"  {name}: {status}")
+        print("=" * 50)
+
+    def predict(self, image, model_name='vit', show_xai=True):
+        processed_image = preprocess_image(image)
+
+        model = self.models.get(model_name)
+        if model is None:
+            available = [k for k, v in self.models.items() if v is not None]
+            raise ValueError(
+                f"Model '{model_name}' not loaded. "
+                f"Available models: {available}"
+            )
+
+        logits = model.predict(processed_image, verbose=0)[0]
+
+        shifted = logits - np.max(logits)
+        exp = np.exp(shifted)
+        predictions = exp / exp.sum()
+
+        pred_class = int(np.argmax(predictions))
+        confidence = float(predictions[pred_class])
+
+        result = {
+            'class': class_names[pred_class],
+            'class_idx': pred_class,
+            'confidence': confidence,
+            'predictions': predictions.tolist(),
+            'model': model_name
+        }
+
+        if show_xai:
+            if model_name == 'vit':
+                xai_image = self.get_vit_attention(model, processed_image)
+                result['xai_type'] = 'attention'
+            else:
+                xai_image = self.get_grad_cam(model, processed_image, pred_class)
+                result['xai_type'] = 'gradcam'
+            result['xai_image'] = xai_image
+
+        return result
+
+    def _get_attn_extractor(self, model):
+        """Build (once) a model that outputs all 12 attention maps plus the logits."""
+        extractor = getattr(self, "_attn_extractor", None)
+        if extractor is None:
+            attn_tensors = [l.output for l in model.layers
+                            if l.name.endswith("_attn_scores")]      # 12 layers, in block order
+            extractor = tf.keras.Model(model.input, attn_tensors + [model.output])
+            self._attn_extractor = extractor
+        return extractor
+
+    def get_vit_attention(self, model, image, method="chefer"):
         try:
-            from huggingface_hub import hf_hub_download
-            path = hf_hub_download(repo_id=HF_REPO_ID, filename=HF_FILENAME_FP16, local_dir="models", local_dir_use_symlinks=False)
-            # Handle nested download
-            final_path = f"models/{HF_FILENAME_FP16}"
-            if not os.path.exists(final_path):
-                for root,_,files in os.walk("models"):
-                    if HF_FILENAME_FP16 in files:
-                        import shutil
-                        shutil.copy(os.path.join(root, HF_FILENAME_FP16), final_path)
-                        break
-            print(f"Downloaded FP16: {final_path}")
-            return final_path
+            extractor = self._get_attn_extractor(model)
+            image = tf.convert_to_tensor(image, dtype=tf.float32)
+
+            with tf.GradientTape() as tape:
+                outputs = extractor(image, training=False)
+                attns, logits = outputs[:-1], outputs[-1]          # 12 x (1, H, N, N), (1, C)
+                class_idx = tf.argmax(logits[0])
+                score = logits[0][class_idx]
+
+            N = attns[0].shape[-1]                                 # 197
+            R = tf.eye(N)
+
+            if method == "rollout":
+                for a in attns:
+                    a = tf.reduce_mean(a[0], axis=0)               # average heads -> (N, N)
+                    a = 0.5 * a + 0.5 * tf.eye(N)                  # add residual connection
+                    a = a / tf.reduce_sum(a, axis=-1, keepdims=True)
+                    R = tf.matmul(a, R)
+            else:
+                grads = tape.gradient(score, attns)                # d(logit)/d(attention), per layer
+                for a, g in zip(attns, grads):
+                    cam = tf.reduce_mean(tf.nn.relu(a[0] * g[0]), axis=0)   # (N, N)
+                    R = R + tf.matmul(cam, R)
+
+            cls_to_patches = R[0, 1:].numpy()                      # CLS row, drop CLS column -> (196,)
+            g = int(np.sqrt(cls_to_patches.shape[0]))              # 14
+            heatmap = cls_to_patches.reshape(g, g)
+
+            heatmap = cv2.resize(heatmap, (224, 224), interpolation=cv2.INTER_CUBIC)
+            heatmap = np.maximum(heatmap, 0)
+            heatmap = (heatmap - heatmap.min()) / (heatmap.max() - heatmap.min() + 1e-8)
+            return heatmap.astype(np.float32)
+
         except Exception as e:
             print(f"FP16 not found ({e}), downloading original 686 MB...")
             from huggingface_hub import hf_hub_download
